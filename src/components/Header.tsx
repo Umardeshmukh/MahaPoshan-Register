@@ -8,6 +8,7 @@ import {
   School,
   FileText,
 } from 'lucide-react';
+import { Show, SignInButton, UserButton } from '@clerk/react';
 
 interface HeaderProps {
   profile: SchoolProfile;
@@ -15,6 +16,9 @@ interface HeaderProps {
   setActiveTab: (tab: 'daily' | 'register' | 'admin' | 'print') => void;
   language: LanguageMode;
   setLanguage: (lang: LanguageMode) => void;
+  daysRemaining?: number;
+  isSuperAdmin?: boolean;
+  onOpenSuperAdmin?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,6 +27,9 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   language,
   setLanguage,
+  daysRemaining,
+  isSuperAdmin,
+  onOpenSuperAdmin,
 }) => {
   return (
     <>
@@ -162,6 +169,50 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 EN
               </button>
+            </div>
+
+            {/* Clerk Authentication Controls & Subscription Status */}
+            <div className="flex items-center gap-2 pl-1">
+              <Show when="signed-out">
+                <SignInButton mode="modal">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-700 hover:bg-amber-800 text-white transition-all cursor-pointer shadow-xs"
+                  >
+                    {language === 'en' ? 'Sign In' : 'लॉग इन'}
+                  </button>
+                </SignInButton>
+              </Show>
+              <Show when="signed-in">
+                <div className="flex items-center gap-2">
+                  {isSuperAdmin && onOpenSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={onOpenSuperAdmin}
+                      className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-[10px] border border-amber-500/40 cursor-pointer shadow-xs"
+                      title="Super Admin कन्सोल उघडा"
+                    >
+                      <span>⚡ Super Admin</span>
+                    </button>
+                  )}
+
+                  {!isSuperAdmin && typeof daysRemaining === 'number' && (
+                    <span
+                      className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        daysRemaining > 30
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : daysRemaining > 7
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200'
+                      }`}
+                    >
+                      सदस्यत्व: {daysRemaining} दिवस
+                    </span>
+                  )}
+
+                  <UserButton />
+                </div>
+              </Show>
             </div>
           </div>
         </div>

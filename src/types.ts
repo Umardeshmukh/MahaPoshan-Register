@@ -189,3 +189,34 @@ export interface AppData {
   stockInward: Record<string, MonthlyStockInward>; // YYYY-MM -> stock inward
   language: LanguageMode;
 }
+
+export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'rejected';
+
+export interface UserAccessRequest {
+  id: string;
+  clerkUserId: string;
+  userEmail: string;
+  userName: string;
+  schoolName: string;
+  udiseNumber: string;
+  centerCluster: string;
+  district: string;
+  phone?: string;
+  status: SubscriptionStatus;
+  requestedAt: string; // ISO string
+  approvedAt?: string;
+  expiresAt?: string; // ISO string
+  durationMonths?: number;
+  notes?: string;
+}
+
+export interface AdminNotification {
+  id: string;
+  type: 'new_request' | 'expiring_soon' | 'expired';
+  title: string;
+  message: string;
+  timestamp: string; // ISO string
+  read: boolean;
+  requestId?: string;
+}
+

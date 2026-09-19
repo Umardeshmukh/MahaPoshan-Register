@@ -1868,7 +1868,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     नमुना शाळा डेटा रीलोड करा
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">
-                    चाचणीसाठी महाराष्ट्र शासकीय प्राथमिक शाळेचा संपूर्ण नमुना डेटा भरा.
+                    चाचणीसाठी महाराष्ट्र शासकीय प्राथमिक शाळेचा संपूर्ण नमुना डेटा व साहित्याचे दर भरा.
                   </p>
                 </div>
                 <button
@@ -1906,6 +1906,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </button>
               </div>
             </div>
+
           </div>
         </div>
       )}

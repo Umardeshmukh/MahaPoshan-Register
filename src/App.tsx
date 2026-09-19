@@ -10,11 +10,16 @@ import {
   AppConfig,
 } from './types';
 import { getInitialData, saveAppData } from './lib/storage';
+import { useUser } from '@clerk/react';
 import { Header } from './components/Header';
 import { DailyEntryView } from './components/DailyEntryView';
 import { MonthlyRegisterView } from './components/MonthlyRegisterView';
 import { AdminSettingsView } from './components/AdminSettingsView';
 import { OfficialPrintView } from './components/OfficialPrintView';
+import { AuthLandingView } from './components/AuthLandingView';
+import { AccessPendingView } from './components/AccessPendingView';
+import { SuperAdminPanel } from './components/SuperAdminPanel';
+import { getUserAccessStatus } from './lib/subscription-store';
 
 export default function App() {
   const [appData, setAppData] = useState<AppData>(() => getInitialData());
@@ -24,6 +29,34 @@ export default function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [targetDailyDate, setTargetDailyDate] = useState<string | undefined>(undefined);
+
+  // Clerk Auth & Subscription state
+  const { isLoaded, isSignedIn, user } = useUser();
+  const [accessRefreshTrigger, setAccessRefreshTrigger] = useState(0);
+
+  // Track secret route for Super Admin: #super-admin or /super-admin
+  const [isSuperAdminRoute, setIsSuperAdminRoute] = useState<boolean>(() => {
+    return (
+      window.location.hash === '#super-admin' ||
+      window.location.pathname.includes('/super-admin')
+    );
+  });
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setIsSuperAdminRoute(
+        window.location.hash === '#super-admin' ||
+        window.location.pathname.includes('/super-admin')
+      );
+    };
+
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
 
   // Sync to local storage whenever appData updates
   useEffect(() => {
@@ -179,6 +212,55 @@ export default function App() {
     setActiveTab('print');
   };
 
+  const accessStatus = getUserAccessStatus(
+    user?.id,
+    user?.primaryEmailAddress?.emailAddress
+  );
+
+  // 1. Super Admin Secret Route Gate: /super-admin or #super-admin
+  if (isSuperAdminRoute) {
+    return (
+      <SuperAdminPanel
+        currentUserEmail={user?.primaryEmailAddress?.emailAddress}
+        onExit={() => {
+          window.location.hash = '';
+          if (window.location.pathname.includes('/super-admin')) {
+            window.history.pushState({}, '', '/');
+          }
+          setIsSuperAdminRoute(false);
+        }}
+      />
+    );
+  }
+
+  // 2. Loading state while Clerk initializes
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 font-semibold">प्रणाली लोड होत आहे...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Compulsory Sign-In Gate: Show Landing Page if not signed in
+  if (!isSignedIn) {
+    return <AuthLandingView />;
+  }
+
+  // 4. Subscription & Access Approval Gate: Show pending/expired view if not approved
+  if (accessStatus.status !== 'active') {
+    return (
+      <AccessPendingView
+        initialRequest={accessStatus.request}
+        status={accessStatus.status}
+        onRefresh={() => setAccessRefreshTrigger((c) => c + 1)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans selection:bg-amber-100 selection:text-amber-900">
       {/* Header is shown on screen, hidden in print mode */}
@@ -189,6 +271,12 @@ export default function App() {
           setActiveTab={setActiveTab}
           language={appData.language}
           setLanguage={handleSetLanguage}
+          daysRemaining={accessStatus.daysRemaining}
+          isSuperAdmin={accessStatus.isSuperAdmin}
+          onOpenSuperAdmin={() => {
+            window.location.hash = '#super-admin';
+            setIsSuperAdminRoute(true);
+          }}
         />
       )}
 

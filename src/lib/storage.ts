@@ -173,6 +173,7 @@ export function getInitialData(): AppData {
         }
         return syncAppDataConfig(parsed);
       }
+
     }
   } catch (err) {
     console.error('Failed to read from localStorage:', err);
@@ -191,7 +192,9 @@ export function saveAppData(data: AppData): void {
 }
 
 /**
+
  * Creates rich, realistic sample data for Maharashtra Primary School (1st to 5th)
+ * with all ingredient rates and menu recipes fully populated.
  */
 export function createDefaultSeedData(): AppData {
   const currentMonth = '2026-09';
@@ -235,7 +238,6 @@ export function createDefaultSeedData(): AppData {
 
   sampleDays.forEach((item) => {
     const dayInfo = getDayInfo(item.date);
-    // find default recipe for that day
     const recipe =
       DEFAULT_RECIPES.find((r) => r.dayOfWeek === dayInfo.dayOfWeek) ||
       DEFAULT_RECIPES[0];
@@ -293,6 +295,10 @@ export function createDefaultSeedData(): AppData {
   saveAppData(appData);
   return appData;
 }
+
+export const createDefaultCleanData = createDefaultSeedData;
+
+
 
 export function exportDataAsJSON(data: AppData): void {
   const synced = syncAppDataConfig(data);
