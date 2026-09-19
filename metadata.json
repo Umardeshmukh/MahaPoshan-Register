@@ -1,0 +1,6 @@
+{
+  "name": "PM POSHAN Daily Register & Stock Inventory",
+  "description": "Mid-Day Meal (PM POSHAN) daily expenditure register and stock inventory manager (शाळा स्तरवार दैनिक खर्च नोंदवही) for government primary schools in Maharashtra.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
