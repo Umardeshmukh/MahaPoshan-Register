@@ -7,8 +7,12 @@ import {
   Settings,
   School,
   FileText,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 import { Show, SignInButton, UserButton } from '@clerk/react';
+import { SyncStatus } from '../lib/cloud-sync';
+
 
 interface HeaderProps {
   profile: SchoolProfile;
@@ -18,6 +22,7 @@ interface HeaderProps {
   setLanguage: (lang: LanguageMode) => void;
   daysRemaining?: number;
   isSuperAdmin?: boolean;
+  syncStatus?: SyncStatus;
   onOpenSuperAdmin?: () => void;
 }
 
@@ -29,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   setLanguage,
   daysRemaining,
   isSuperAdmin,
+  syncStatus,
   onOpenSuperAdmin,
 }) => {
   return (
@@ -45,10 +51,29 @@ export const Header: React.FC<HeaderProps> = ({
                 : 'महाराष्ट्र शासन • प्रधानमंत्री पोषण शक्ती निर्माण योजना'}
             </span>
           </div>
-          <div className="flex items-center gap-2 shrink-0 font-mono text-[11px] text-amber-200">
+          <div className="flex items-center gap-3 shrink-0 font-mono text-[11px] text-amber-200">
+            {syncStatus === 'syncing' && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-amber-200 animate-pulse">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>क्लाउड सिंक होत आहे...</span>
+              </span>
+            )}
+            {syncStatus === 'synced' && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-emerald-300 font-sans" title="डेटा Supabase क्लाउडवर सुरक्षितपणे जतन झाला आहे">
+                <Cloud className="w-3 h-3 text-emerald-300" />
+                <span>क्लाउड सुरक्षित</span>
+              </span>
+            )}
+            {syncStatus === 'error' && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-amber-300 font-sans" title="स्थानिक साठवणूक चालू आहे">
+                <Cloud className="w-3 h-3 text-amber-400" />
+                <span>स्थानिक डेटा</span>
+              </span>
+            )}
             <span>UDISE: {profile.udiseNumber || '27251403201'}</span>
           </div>
         </div>
+
 
         {/* Main Navbar */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-3.5 flex items-center justify-between gap-3">

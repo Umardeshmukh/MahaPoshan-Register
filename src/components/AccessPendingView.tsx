@@ -8,6 +8,7 @@ import {
   submitAccessRequest,
   getUserAccessStatus,
 } from '../lib/subscription-store';
+import { syncSchoolProfileToCloud } from '../lib/cloud-sync';
 import {
   Clock,
   CheckCircle2,
@@ -55,10 +56,14 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
 
     setIsSubmitting(true);
     try {
+      const userEmail = user?.primaryEmailAddress?.emailAddress || 'unknown@example.com';
+      const userName = user?.fullName || user?.firstName || 'शिक्षक / मुख्याध्यापक';
+      const clerkUserId = user?.id || 'unknown';
+
       submitAccessRequest({
-        clerkUserId: user?.id || 'unknown',
-        userEmail: user?.primaryEmailAddress?.emailAddress || 'unknown@example.com',
-        userName: user?.fullName || user?.firstName || 'शिक्षक / मुख्याध्यापक',
+        clerkUserId,
+        userEmail,
+        userName,
         schoolName,
         udiseNumber,
         centerCluster,
@@ -67,10 +72,29 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
         notes,
       });
 
+      // Also persist to Supabase schools table
+      syncSchoolProfileToCloud(
+        {
+          schoolName,
+          udiseNumber,
+          centerCluster,
+          standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
+          district,
+          taluka: '',
+          headmasterName: userName,
+          inchargeTeacher: '',
+          cookName: '',
+        },
+        clerkUserId,
+        userEmail,
+        userName
+      ).catch((err) => console.warn('Supabase profile sync background notice:', err));
+
       setSubmittedSuccess(true);
       setTimeout(() => {
         onRefresh();
       }, 600);
+
     } catch (err) {
       console.error(err);
       alert('विनंती सादर करताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.');
@@ -135,7 +159,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                 आपल्या नोंदवहीचे सदस्यत्व समाप्त झाले आहे
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-lg mx-auto">
-                आपल्या शाळेसाठी देण्यात आलेली प्रवेश मुदत संपली आहे. 
+                आपल्या शाळेसाठी देण्यात आलेली प्रवेश मुदत संपली आहे.
                 पुढील नोंदणी व वापरासाठी कृपया सदस्यत्व नूतनीकरण करा किंवा ॲडमिनशी संपर्क साधा.
               </p>
 
@@ -172,7 +196,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
               </h2>
 
               <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-lg mx-auto leading-relaxed">
-                आपली शाळा नोंदणी विनंती यशस्वीरीत्या प्राप्त झाली आहे. 
+                आपली शाळा नोंदणी विनंती यशस्वीरीत्या प्राप्त झाली आहे.
                 सुपर ॲडमिनद्वारे खातरजमा करून सदस्यत्व कालावधी मंजूर केल्यावर आपले खाते त्वरित सुरू होईल.
               </p>
 
@@ -269,7 +293,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      केंद्र / Cluster
+                      केंद्र / Kendra
                     </label>
                     <input
                       type="text"

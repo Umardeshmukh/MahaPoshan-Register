@@ -20,6 +20,16 @@ import { AuthLandingView } from './components/AuthLandingView';
 import { AccessPendingView } from './components/AccessPendingView';
 import { SuperAdminPanel } from './components/SuperAdminPanel';
 import { getUserAccessStatus } from './lib/subscription-store';
+import {
+  pullUserDataFromCloud,
+  syncDailyEntryToCloud,
+  syncDeleteDailyEntryFromCloud,
+  syncStockInwardToCloud,
+  syncSchoolProfileToCloud,
+  syncFullAppDataToCloud,
+  subscribeSyncStatus,
+  SyncStatus,
+} from './lib/cloud-sync';
 
 export default function App() {
   const [appData, setAppData] = useState<AppData>(() => getInitialData());
@@ -29,10 +39,16 @@ export default function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [targetDailyDate, setTargetDailyDate] = useState<string | undefined>(undefined);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
 
   // Clerk Auth & Subscription state
   const { isLoaded, isSignedIn, user } = useUser();
   const [accessRefreshTrigger, setAccessRefreshTrigger] = useState(0);
+
+  // Subscribe to live cloud sync status
+  useEffect(() => {
+    return subscribeSyncStatus(setSyncStatus);
+  }, []);
 
   // Track secret route for Super Admin: #super-admin or /super-admin
   const [isSuperAdminRoute, setIsSuperAdminRoute] = useState<boolean>(() => {
@@ -63,6 +79,40 @@ export default function App() {
     saveAppData(appData);
   }, [appData]);
 
+  // Hydrate from Supabase Cloud Database on user login
+  useEffect(() => {
+    if (isSignedIn && user?.id) {
+      pullUserDataFromCloud(user.id).then((cloudData) => {
+        if (cloudData && (cloudData.profile || cloudData.dailyEntries || cloudData.stockInward)) {
+          setAppData((prev) => {
+            const merged: AppData = {
+              ...prev,
+              profile: cloudData.profile || prev.profile,
+              dailyEntries: {
+                ...prev.dailyEntries,
+                ...(cloudData.dailyEntries || {}),
+              },
+              stockInward: {
+                ...prev.stockInward,
+                ...(cloudData.stockInward || {}),
+              },
+            };
+            saveAppData(merged);
+            return merged;
+          });
+        } else {
+          // Initial background backup of local records to Supabase
+          syncFullAppDataToCloud(
+            appData,
+            user.id,
+            user.primaryEmailAddress?.emailAddress,
+            user.fullName || undefined
+          );
+        }
+      });
+    }
+  }, [isSignedIn, user?.id]);
+
   const handleSetLanguage = (lang: LanguageMode) => {
     setAppData((prev) => ({
       ...prev,
@@ -87,6 +137,10 @@ export default function App() {
         [entry.id]: entry,
       },
     }));
+
+    if (user?.id) {
+      syncDailyEntryToCloud(entry, user.id);
+    }
   };
 
   const handleDeleteDailyEntry = (dateKey: string) => {
@@ -98,6 +152,10 @@ export default function App() {
         dailyEntries: nextEntries,
       };
     });
+
+    if (user?.id) {
+      syncDeleteDailyEntryFromCloud(dateKey, user.id);
+    }
   };
 
   const handleUpdateStockInward = (
@@ -111,6 +169,10 @@ export default function App() {
         [monthKey]: inward,
       },
     }));
+
+    if (user?.id) {
+      syncStockInwardToCloud(monthKey, inward, user.id);
+    }
   };
 
   const handleUpdateConfig = (newConfig: AppConfig) => {
@@ -143,7 +205,17 @@ export default function App() {
           }
         : undefined,
     }));
+
+    if (user?.id) {
+      syncSchoolProfileToCloud(
+        profile,
+        user.id,
+        user.primaryEmailAddress?.emailAddress,
+        user.fullName || undefined
+      );
+    }
   };
+
 
   const handleUpdateIngredients = (ingredients: Ingredient[]) => {
     setAppData((prev) => {
@@ -273,6 +345,7 @@ export default function App() {
           setLanguage={handleSetLanguage}
           daysRemaining={accessStatus.daysRemaining}
           isSuperAdmin={accessStatus.isSuperAdmin}
+          syncStatus={syncStatus}
           onOpenSuperAdmin={() => {
             window.location.hash = '#super-admin';
             setIsSuperAdminRoute(true);
