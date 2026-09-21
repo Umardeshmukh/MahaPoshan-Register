@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUser, useClerk } from '@clerk/react';
 import {
   UserAccessRequest,
   SubscriptionStatus,
+  LegalDocType,
 } from '../types';
 import {
   submitAccessRequest,
   getUserAccessStatus,
 } from '../lib/subscription-store';
 import { syncSchoolProfileToCloud } from '../lib/cloud-sync';
+import { LegalModal } from './LegalModal';
+import {
+  CURRENT_TERMS_VERSION,
+  CURRENT_PRIVACY_VERSION,
+} from '../lib/legal-docs';
+import { validateReferralCode } from '../lib/referral-store';
 import {
   Clock,
   CheckCircle2,
@@ -22,6 +29,9 @@ import {
   Send,
   ShieldAlert,
   HelpCircle,
+  Gift,
+  ShieldCheck,
+  FileText,
 } from 'lucide-react';
 
 interface AccessPendingViewProps {
@@ -47,10 +57,50 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
 
+  // Referral code state (auto-fill from ?ref= query param if present)
+  const [referralCode, setReferralCode] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const urlRef = new URLSearchParams(window.location.search).get('ref');
+      if (urlRef) return urlRef.toUpperCase();
+    }
+    return initialRequest?.referralCode || '';
+  });
+  const [referralFeedback, setReferralFeedback] = useState<{
+    valid: boolean;
+    message: string;
+  } | null>(null);
+
+  // Legal agreement compulsory checkbox & modal state
+  const [agreedToLegal, setAgreedToLegal] = useState<boolean>(
+    initialRequest?.agreedToTerms || false
+  );
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [activeLegalTab, setActiveLegalTab] = useState<LegalDocType>('terms');
+
+  // Validate referral code on change or load
+  useEffect(() => {
+    if (referralCode.trim()) {
+      const res = validateReferralCode(referralCode, user?.id);
+      setReferralFeedback({ valid: res.valid, message: res.message });
+    } else {
+      setReferralFeedback(null);
+    }
+  }, [referralCode, user?.id]);
+
+  const openLegalDoc = (tab: LegalDocType) => {
+    setActiveLegalTab(tab);
+    setLegalModalOpen(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!schoolName || !udiseNumber) {
       alert('कृपया शाळेचे नाव आणि UDISE क्रमांक भरा.');
+      return;
+    }
+
+    if (!agreedToLegal) {
+      alert('कृपया पुढे जाण्यापूर्वी नियम व अटी (Terms & Conditions) आणि गोपनीयता धोरण (Privacy Policy) मान्य करा.');
       return;
     }
 
@@ -70,6 +120,12 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
         district,
         phone,
         notes,
+        referralCode: referralCode.trim() ? referralCode.trim().toUpperCase() : undefined,
+        // Legal compliance audit trail
+        agreedToTerms: true,
+        agreedAt: new Date().toISOString(),
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyPolicyVersion: CURRENT_PRIVACY_VERSION,
       });
 
       // Also persist to Supabase schools table
@@ -345,15 +401,92 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                   />
                 </div>
 
+                {/* Referral Code Input (Optional) */}
+                <div className="bg-amber-50/50 border border-amber-200/80 rounded-xl p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-semibold text-slate-800 flex items-center gap-1.5">
+                      <Gift className="w-3.5 h-3.5 text-amber-700" />
+                      <span>रेफरल कोड (Referral Code - ऐच्छिक)</span>
+                    </label>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+                      बक्षीस योजना
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="उदा. MP-PUNE98 किंवा MP-272501"
+                    value={referralCode}
+                    onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900 font-mono uppercase bg-white text-xs"
+                  />
+                  {referralFeedback && (
+                    <p
+                      className={`text-[11px] font-medium flex items-center gap-1 ${
+                        referralFeedback.valid ? 'text-emerald-700' : 'text-rose-600'
+                      }`}
+                    >
+                      {referralFeedback.valid ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                      <span>{referralFeedback.message}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Compulsory Legal Agreement Checkbox */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      required
+                      checked={agreedToLegal}
+                      onChange={(e) => setAgreedToLegal(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded text-amber-700 focus:ring-amber-500 border-slate-300 cursor-pointer"
+                    />
+                    <span className="text-xs text-slate-700 leading-snug">
+                      <span className="font-semibold text-slate-900">
+                        I agree to the{' '}
+                        <button
+                          type="button"
+                          onClick={() => openLegalDoc('terms')}
+                          className="text-amber-800 font-bold underline hover:text-amber-950 inline cursor-pointer"
+                        >
+                          Terms & Conditions
+                        </button>{' '}
+                        and{' '}
+                        <button
+                          type="button"
+                          onClick={() => openLegalDoc('privacy')}
+                          className="text-amber-800 font-bold underline hover:text-amber-950 inline cursor-pointer"
+                        >
+                          Privacy Policy
+                        </button>
+                        . <span className="text-rose-600">*</span>
+                      </span>
+                      <br />
+                      <span className="text-[11px] text-slate-500">
+                        (मी महापोषण रजिस्टरचे सर्व नियम व अटी आणि गोपनीयता धोरण वाचले असून ते मला मान्य आहेत.)
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-2.5 px-4 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-amber-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                    disabled={isSubmitting || !agreedToLegal}
+                    className="w-full py-2.5 px-4 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md shadow-amber-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <Send className="w-4 h-4" />
                     <span>{isSubmitting ? 'पाठवत आहे...' : 'प्रवेश विनंती पाठवा (Submit Request)'}</span>
                   </button>
+                  {!agreedToLegal && (
+                    <p className="text-[11px] text-center text-amber-800 mt-1.5 font-medium">
+                      * नोंदणी करण्यासाठी वरील नियम व अटींचा चेकबॉक्स निवडणे अनिवार्य आहे.
+                    </p>
+                  )}
                 </div>
               </form>
             </div>
@@ -370,10 +503,54 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-3 px-4 text-center text-[11px] text-slate-400">
-        MahaPoshan Register • सुरक्षित सदस्यत्व प्रणाली
+      {/* Footer with 4 Mandatory Legal Links */}
+      <footer className="border-t border-slate-200 bg-white py-4 px-4 text-center text-xs text-slate-500">
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-500">
+            MahaPoshan Register • महाराष्ट्र शासन शालेय पोषण आहार (PM POSHAN)
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px]">
+            <button
+              type="button"
+              onClick={() => openLegalDoc('terms')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              1. Terms & Conditions (नियम व अटी)
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => openLegalDoc('privacy')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              2. Privacy Policy (गोपनीयता)
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => openLegalDoc('refund')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              3. Refund Policy (परतावा धोरण)
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => openLegalDoc('contact')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              4. Contact / Legal Info (संपर्क)
+            </button>
+          </div>
+        </div>
       </footer>
+
+      {/* Legal Documents Modal */}
+      <LegalModal
+        isOpen={legalModalOpen}
+        initialTab={activeLegalTab}
+        onClose={() => setLegalModalOpen(false)}
+      />
     </div>
   );
 };

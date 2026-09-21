@@ -9,6 +9,7 @@ import {
   FileText,
   Cloud,
   RefreshCw,
+  Gift,
 } from 'lucide-react';
 import { Show, SignInButton, UserButton } from '@clerk/react';
 import { SyncStatus } from '../lib/cloud-sync';
@@ -24,6 +25,7 @@ interface HeaderProps {
   isSuperAdmin?: boolean;
   syncStatus?: SyncStatus;
   onOpenSuperAdmin?: () => void;
+  onOpenReferral?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   isSuperAdmin,
   syncStatus,
   onOpenSuperAdmin,
+  onOpenReferral,
 }) => {
   return (
     <>
@@ -233,6 +236,21 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       सदस्यत्व: {daysRemaining} दिवस
                     </span>
+                  )}
+
+                  {onOpenReferral && (
+                    <button
+                      type="button"
+                      onClick={onOpenReferral}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-700 hover:to-amber-900 text-white font-bold text-[11px] shadow-xs cursor-pointer border border-amber-500/40 transition-all hover:scale-105 active:scale-95"
+                      title="इतर शाळा जोडा आणि रोख बक्षीस मिळवा!"
+                    >
+                      <Gift className="w-3.5 h-3.5 text-amber-300 animate-bounce" />
+                      <span className="hidden sm:inline">रेफर करा</span>
+                      <span className="px-1.5 py-0.5 bg-amber-400 text-amber-950 rounded-md text-[9px] font-black">
+                        ₹100
+                      </span>
+                    </button>
                   )}
 
                   <UserButton />

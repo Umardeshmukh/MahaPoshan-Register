@@ -4,7 +4,16 @@ import { AppData, DailyRegisterEntry, MonthlyStockInward, SchoolProfile } from '
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
 
 let currentSyncStatus: SyncStatus = 'idle';
+let cachedSchoolId: string | null = null;
 const statusListeners = new Set<(status: SyncStatus) => void>();
+
+export function getCachedSchoolId(): string | null {
+  return cachedSchoolId;
+}
+
+export function setCachedSchoolId(id: string | null): void {
+  cachedSchoolId = id;
+}
 
 export function getSyncStatus(): SyncStatus {
   return currentSyncStatus;
@@ -33,6 +42,7 @@ export async function pullUserDataFromCloud(
   profile?: SchoolProfile;
   dailyEntries?: Record<string, DailyRegisterEntry>;
   stockInward?: Record<string, MonthlyStockInward>;
+  schoolId?: string;
 } | null> {
   if (!isSupabaseConfigured() || !clerkUserId) return null;
 
@@ -71,6 +81,7 @@ export async function pullUserDataFromCloud(
 
     if (schoolRes.data) {
       hasAnyData = true;
+      cachedSchoolId = schoolRes.data.id || null;
       profile = {
         schoolName: schoolRes.data.school_name || '',
         udiseNumber: schoolRes.data.udise_number || '',
@@ -144,7 +155,7 @@ export async function syncDailyEntryToCloud(
   try {
     setSyncStatus('syncing');
 
-    const row = {
+    const row: any = {
       clerk_user_id: clerkUserId,
       date: entry.date,
       dish_id: entry.dishId,
@@ -157,7 +168,13 @@ export async function syncDailyEntryToCloud(
       total_cooking_cost: entry.totalCookingCost || 0,
       remarks: entry.remarks || '',
       saved_at: entry.savedAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      updated_by: clerkUserId,
     };
+
+    if (cachedSchoolId) {
+      row.school_id = cachedSchoolId;
+    }
 
     const { error } = await supabase
       .from('daily_entries')
@@ -217,12 +234,17 @@ export async function syncStockInwardToCloud(
   try {
     setSyncStatus('syncing');
 
-    const row = {
+    const row: any = {
       clerk_user_id: clerkUserId,
       month_key: monthKey,
       stock_data: stockData || {},
       updated_at: new Date().toISOString(),
+      updated_by: clerkUserId,
     };
+
+    if (cachedSchoolId) {
+      row.school_id = cachedSchoolId;
+    }
 
     const { error } = await supabase
       .from('stock_inward')
@@ -267,11 +289,18 @@ export async function syncSchoolProfileToCloud(
       incharge_teacher: profile.inchargeTeacher || '',
       cook_name: profile.cookName || '',
       updated_at: new Date().toISOString(),
+      updated_by: clerkUserId,
     };
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('schools')
-      .upsert(row, { onConflict: 'clerk_user_id' });
+      .upsert(row, { onConflict: 'clerk_user_id' })
+      .select('id')
+      .maybeSingle();
+
+    if (data?.id) {
+      cachedSchoolId = data.id;
+    }
 
     if (error) {
       console.warn('Supabase school profile sync error:', error);
@@ -282,6 +311,94 @@ export async function syncSchoolProfileToCloud(
   } catch (err) {
     console.error('Failed to sync school profile to Supabase:', err);
     setSyncStatus('error');
+  }
+}
+
+/**
+ * Exports complete tenant dataset for the authorized school in compliance with requirement 11.
+ */
+export async function exportSchoolTenantData(
+  clerkUserId: string,
+  schoolProfile?: SchoolProfile
+): Promise<any> {
+  if (!isSupabaseConfigured() || !clerkUserId) {
+    throw new Error('Supabase is not configured or user not authenticated');
+  }
+
+  try {
+    // 1. Fetch School record
+    const schoolPromise = supabase
+      .from('schools')
+      .select('*')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    // 2. Fetch daily entries
+    const entriesPromise = supabase
+      .from('daily_entries')
+      .select('*')
+      .eq('clerk_user_id', clerkUserId)
+      .order('date', { ascending: true });
+
+    // 3. Fetch stock inward
+    const stockPromise = supabase
+      .from('stock_inward')
+      .select('*')
+      .eq('clerk_user_id', clerkUserId)
+      .order('month_key', { ascending: true });
+
+    const [schoolRes, entriesRes, stockRes] = await Promise.all([
+      schoolPromise,
+      entriesPromise,
+      stockPromise,
+    ]);
+
+    const exportPayload = {
+      exportedAt: new Date().toISOString(),
+      exportedBy: clerkUserId,
+      school: schoolRes.data || schoolProfile,
+      dailyEntriesCount: entriesRes.data?.length || 0,
+      dailyEntries: entriesRes.data || [],
+      stockInwardCount: stockRes.data?.length || 0,
+      stockInward: stockRes.data || [],
+    };
+
+    // 4. Record audit event
+    try {
+      await supabase.from('audit_logs').insert({
+        school_id: schoolRes.data?.id || cachedSchoolId || null,
+        user_id: clerkUserId,
+        action: 'DATA_EXPORT',
+        table_name: 'schools',
+        record_id: schoolRes.data?.id || 'export',
+        new_values: { recordCount: (entriesRes.data?.length || 0) + (stockRes.data?.length || 0) },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (e) {
+      // Non-blocking audit notice
+    }
+
+    // 5. Trigger browser download
+    if (typeof window !== 'undefined') {
+      const udise = schoolRes.data?.udise_number || schoolProfile?.udiseNumber || 'school';
+      const dateStr = new Date().toISOString().split('T')[0];
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `MahaPoshan_${udise}_Data_Export_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    return exportPayload;
+  } catch (err) {
+    console.error('Data export error:', err);
+    throw err;
   }
 }
 
@@ -306,6 +423,7 @@ export async function syncFullAppDataToCloud(
     const entries = Object.values(data.dailyEntries || {});
     if (entries.length > 0) {
       const rows = entries.map((entry) => ({
+        school_id: cachedSchoolId || undefined,
         clerk_user_id: clerkUserId,
         date: entry.date,
         dish_id: entry.dishId,
@@ -318,6 +436,8 @@ export async function syncFullAppDataToCloud(
         total_cooking_cost: entry.totalCookingCost || 0,
         remarks: entry.remarks || '',
         saved_at: entry.savedAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        updated_by: clerkUserId,
       }));
 
       await supabase
@@ -329,10 +449,12 @@ export async function syncFullAppDataToCloud(
     const stockKeys = Object.keys(data.stockInward || {});
     if (stockKeys.length > 0) {
       const stockRows = stockKeys.map((mKey) => ({
+        school_id: cachedSchoolId || undefined,
         clerk_user_id: clerkUserId,
         month_key: mKey,
         stock_data: data.stockInward[mKey] || {},
         updated_at: new Date().toISOString(),
+        updated_by: clerkUserId,
       }));
 
       await supabase

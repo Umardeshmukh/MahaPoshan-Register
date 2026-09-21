@@ -3,6 +3,7 @@ import {
   UserAccessRequest,
   AdminNotification,
   SubscriptionStatus,
+  ReferralRecord,
 } from '../types';
 import {
   getAllAccessRequests,
@@ -18,6 +19,10 @@ import {
   sendAdminEmailNotification,
   DEFAULT_SUPER_ADMIN_PASSCODE,
 } from '../lib/subscription-store';
+import {
+  getAllReferrals,
+  markRewardAsPaid,
+} from '../lib/referral-store';
 import { sendTestEmail, sendApprovalConfirmationEmail } from '../lib/email-service';
 
 import {
@@ -41,6 +46,10 @@ import {
   Trash2,
   PlusCircle,
   Filter,
+  Gift,
+  Wallet,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 interface SuperAdminPanelProps {
@@ -61,11 +70,12 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
   // Data
   const [requests, setRequests] = useState<UserAccessRequest[]>([]);
+  const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [config, setConfig] = useState(getSuperAdminConfig());
 
   // UI States
-  const [activeTab, setActiveTab] = useState<'requests' | 'active' | 'notifications' | 'settings'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'active' | 'referrals' | 'notifications' | 'settings'>('requests');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
@@ -76,11 +86,19 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const [customExpiryDate, setCustomExpiryDate] = useState<string>('');
   const [showApprovalModal, setShowApprovalModal] = useState(false);
 
+  // Payout Modal State
+  const [selectedReferralForPayout, setSelectedReferralForPayout] = useState<ReferralRecord | null>(null);
+  const [payoutPaymentRef, setPayoutPaymentRef] = useState('');
+  const [payoutAmount, setPayoutAmount] = useState<number>(100);
+  const [payoutSuccessMsg, setPayoutSuccessMsg] = useState<string | null>(null);
+  const [copiedUpi, setCopiedUpi] = useState(false);
+
   // Email Test alert status
   const [emailStatusMsg, setEmailStatusMsg] = useState<string | null>(null);
 
   const loadData = () => {
     setRequests(getAllAccessRequests());
+    setReferrals(getAllReferrals());
     setNotifications(getAdminNotifications());
     setConfig(getSuperAdminConfig());
   };
@@ -424,7 +442,43 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
           </div>
         )}
 
+        {/* Navigation Tabs Bar */}
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab('requests')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'requests'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <School className="w-4 h-4" />
+            <span>शाळा प्रवेश विनंत्या (School Requests)</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 text-[10px] font-mono">
+              {requests.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('referrals')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'referrals'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <Gift className="w-4 h-4" />
+            <span>रेफरल्स व बक्षिसे (Referrals & Rewards)</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-700 text-white text-[10px] font-mono">
+              {referrals.length}
+            </span>
+          </button>
+        </div>
+
         {/* Requests Management Table Card */}
+        {activeTab === 'requests' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Header & Controls */}
           <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
@@ -510,9 +564,19 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                       <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4">
                           <div className="font-bold text-slate-900">{req.schoolName}</div>
-                          <div className="text-[11px] font-mono text-slate-500">
-                            UDISE: {req.udiseNumber}
+                          <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
+                            <span>UDISE: {req.udiseNumber}</span>
+                            {req.referralCode && (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold text-[9px]">
+                                Ref: {req.referralCode}
+                              </span>
+                            )}
                           </div>
+                          {req.agreedToTerms && (
+                            <div className="text-[10px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
+                              <span>✓ अटी मान्य ({req.termsVersion || 'v1.0'})</span>
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3 px-4">
@@ -635,7 +699,327 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             </table>
           </div>
         </div>
+        )}
+
+        {/* Referrals & Rewards Management Tab Card */}
+        {activeTab === 'referrals' && (
+          <div className="space-y-6">
+            {/* Referral Stats Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+                <span className="text-xs font-semibold text-slate-500">एकूण रेफरल्स</span>
+                <p className="text-2xl font-black text-slate-900 mt-1 font-mono">
+                  {referrals.length}
+                </p>
+                <span className="text-[11px] text-slate-400">नोंदणी केलेल्या शाळा</span>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-emerald-200 bg-emerald-50/30 shadow-xs">
+                <span className="text-xs font-semibold text-emerald-800">मंजूर झालेल्या शाळा</span>
+                <p className="text-2xl font-black text-emerald-700 mt-1 font-mono">
+                  {referrals.filter((r) => r.registrationStatus === 'active').length}
+                </p>
+                <span className="text-[11px] text-emerald-600">सक्रिय सदस्यत्व सुरू</span>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-amber-200 bg-amber-50/40 shadow-xs">
+                <span className="text-xs font-semibold text-amber-800">बक्षीस देण्यास पात्र</span>
+                <p className="text-2xl font-black text-amber-800 mt-1 font-mono">
+                  ₹{referrals.filter((r) => r.rewardStatus === 'eligible').reduce((sum, r) => sum + r.rewardAmount, 0)}
+                </p>
+                <span className="text-[11px] text-amber-700">
+                  {referrals.filter((r) => r.rewardStatus === 'eligible').length} शाळा (वितरण बाकी)
+                </span>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+                <span className="text-xs font-semibold text-slate-500">वितरित केलेले बक्षीस</span>
+                <p className="text-2xl font-black text-emerald-600 mt-1 font-mono">
+                  ₹{referrals.filter((r) => r.rewardStatus === 'paid').reduce((sum, r) => sum + r.rewardAmount, 0)}
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  {referrals.filter((r) => r.rewardStatus === 'paid').length} शाळांना अदा केले
+                </span>
+              </div>
+            </div>
+
+            {/* Referrals List Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Gift className="w-5 h-5 text-amber-600" />
+                    <span>रेफरल यादी व बक्षीस वितरण व्यवस्थापन</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    शिक्षकांनी जोडलेल्या शाळा तपासा आणि थेट UPI द्वारे बक्षीस वितरण नोंदवा
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadData}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>रिफ्रेश</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <th className="py-3 px-4">रेफर करणारा शिक्षक (Referrer)</th>
+                      <th className="py-3 px-4">बक्षीस मिळण्यासाठी UPI तपशील</th>
+                      <th className="py-3 px-4">जोडलेली नवीन शाळा (Referred School)</th>
+                      <th className="py-3 px-4">शाळा स्थिती</th>
+                      <th className="py-3 px-4">बक्षीस स्थिती</th>
+                      <th className="py-3 px-4 text-right">ॲक्शन (Action)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {referrals.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-slate-400">
+                          सध्या कोणत्याही रेफरल नोंदी उपलब्ध नाहीत.
+                        </td>
+                      </tr>
+                    ) : (
+                      referrals.map((ref) => (
+                        <tr key={ref.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900">{ref.referrerName}</div>
+                            <div className="text-[11px] text-slate-500">{ref.referrerSchool}</div>
+                            <div className="text-[10px] font-mono text-amber-800 font-semibold mt-0.5">
+                              कोड: {ref.referrerCode}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {ref.referrerUpiId ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
+                                  {ref.referrerUpiId}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(ref.referrerUpiId || '');
+                                    alert(`UPI ID कॉपी झाला: ${ref.referrerUpiId}`);
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-amber-700 cursor-pointer"
+                                  title="UPI ID कॉपी करा"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">
+                                UPI नोंदवलेला नाही
+                              </span>
+                            )}
+                            {ref.referrerPhone && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                मो: {ref.referrerPhone}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-slate-900">{ref.referredSchoolName}</div>
+                            <div className="text-[11px] font-mono text-slate-500">
+                              UDISE: {ref.referredUdise}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              नोंदणी: {new Date(ref.registeredAt).toLocaleDateString('mr-IN')}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {ref.registrationStatus === 'active' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>सक्रिय (Approved)</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                <span>प्रलंबित (Pending)</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {ref.rewardStatus === 'paid' ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>₹{ref.rewardAmount} दिले (Paid)</span>
+                                </span>
+                                {ref.rewardPaymentRef && (
+                                  <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-xs">
+                                    Ref: {ref.rewardPaymentRef}
+                                  </div>
+                                )}
+                              </div>
+                            ) : ref.rewardStatus === 'eligible' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                <span>बक्षीस पात्र (₹{ref.rewardAmount})</span>
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 font-medium">
+                                शाळा मंजुरी प्रलंबित
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            {ref.rewardStatus !== 'paid' ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedReferralForPayout(ref);
+                                  setPayoutPaymentRef('');
+                                  setPayoutAmount(ref.rewardAmount || 100);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 ml-auto"
+                              >
+                                <Wallet className="w-3.5 h-3.5" />
+                                <span>बक्षीस द्या (Pay)</span>
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-emerald-600 font-semibold">
+                                ✓ पूर्ण झाले
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Manual Reward Payout Modal */}
+      {selectedReferralForPayout && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  रेफरल बक्षीस वितरण नोंदवा (Manual Reward Payout)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedReferralForPayout(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="my-4 p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 space-y-2 text-slate-700">
+              <div>
+                <span className="text-slate-500">रेफर करणारा:</span>{' '}
+                <span className="font-bold text-slate-900">
+                  {selectedReferralForPayout.referrerName} ({selectedReferralForPayout.referrerSchool})
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">जोडलेली शाळा:</span>{' '}
+                <span className="font-semibold text-slate-800">
+                  {selectedReferralForPayout.referredSchoolName} ({selectedReferralForPayout.referredUdise})
+                </span>
+              </div>
+              <div className="pt-1 border-t border-amber-200/80 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-500 block text-[11px]">UPI ID:</span>
+                  <span className="font-mono font-bold text-sm text-amber-950">
+                    {selectedReferralForPayout.referrerUpiId || 'UPI नोंदवलेला नाही'}
+                  </span>
+                </div>
+                {selectedReferralForPayout.referrerUpiId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedReferralForPayout.referrerUpiId || '');
+                      setCopiedUpi(true);
+                      setTimeout(() => setCopiedUpi(false), 2000);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold text-[10px] cursor-pointer flex items-center gap-1"
+                  >
+                    {copiedUpi ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedUpi ? 'कॉपी झाले!' : 'Copy UPI'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-semibold text-slate-800 mb-1">
+                  बक्षीस रक्कम (₹ Amount)
+                </label>
+                <input
+                  type="number"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-900 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-800 mb-1">
+                  UPI ट्रान्झॅक्शन संदर्भ / UTR क्रमांक <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="उदा. UPI-UTR-49201948123 किंवा GPay Ref"
+                  value={payoutPaymentRef}
+                  onChange={(e) => setPayoutPaymentRef(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-mono bg-white"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  disabled={!payoutPaymentRef.trim()}
+                  onClick={() => {
+                    if (!payoutPaymentRef.trim()) {
+                      alert('कृपया UPI ट्रान्झॅक्शन संदर्भ क्रमांक टाका.');
+                      return;
+                    }
+                    markRewardAsPaid(selectedReferralForPayout.id, payoutPaymentRef, payoutAmount);
+                    setSelectedReferralForPayout(null);
+                    loadData();
+                    alert(`₹${payoutAmount} चे बक्षीस जमा झाल्याची नोंद यशस्वी झाली!`);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
+                >
+                  बक्षीस दिल्याची नोंद करा (Confirm Paid)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReferralForPayout(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  रद्द करा
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Approval Duration Modal */}
       {showApprovalModal && selectedRequest && (

@@ -30,6 +30,9 @@ import {
   subscribeSyncStatus,
   SyncStatus,
 } from './lib/cloud-sync';
+import { LegalModal } from './components/LegalModal';
+import { ReferralCard } from './components/ReferralCard';
+import { LegalDocType } from './types';
 
 export default function App() {
   const [appData, setAppData] = useState<AppData>(() => getInitialData());
@@ -44,6 +47,16 @@ export default function App() {
   // Clerk Auth & Subscription state
   const { isLoaded, isSignedIn, user } = useUser();
   const [accessRefreshTrigger, setAccessRefreshTrigger] = useState(0);
+
+  // Legal & Referral Modals state
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [activeLegalTab, setActiveLegalTab] = useState<LegalDocType>('terms');
+  const [referralModalOpen, setReferralModalOpen] = useState(false);
+
+  const handleOpenLegal = (tab: LegalDocType) => {
+    setActiveLegalTab(tab);
+    setLegalModalOpen(true);
+  };
 
   // Subscribe to live cloud sync status
   useEffect(() => {
@@ -350,6 +363,7 @@ export default function App() {
             window.location.hash = '#super-admin';
             setIsSuperAdminRoute(true);
           }}
+          onOpenReferral={() => setReferralModalOpen(true)}
         />
       )}
 
@@ -400,18 +414,73 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Footer with 4 Mandatory Legal Links */}
       {activeTab !== 'print' && (
-        <footer className="no-print hidden md:block bg-white border-t border-slate-200/80 py-5 px-4 text-center text-xs text-slate-500">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p>
-              महाराष्ट्र शासन • शालेय पोषण आहार योजना (PM POSHAN) • शाळा स्तरवार दैनिक खर्च नोंदवही
-            </p>
-            <p className="text-slate-400">
-              Offline-ready • स्थानिक साठवणूक (Local Storage) • सुरक्षित डेटा
-            </p>
+        <footer className="no-print hidden md:block bg-white border-t border-slate-200/80 py-4 px-4 text-xs text-slate-500">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-slate-700">
+                महाराष्ट्र शासन • शालेय पोषण आहार योजना (PM POSHAN) • शाळा स्तरवार दैनिक खर्च नोंदवही
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Offline-ready • स्थानिक साठवणूक (Local Storage) • सुरक्षित क्लाउड सिंक
+              </p>
+            </div>
+
+            {/* Legal Documents Links */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+              <button
+                type="button"
+                onClick={() => handleOpenLegal('terms')}
+                className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+              >
+                1. Terms & Conditions
+              </button>
+              <span className="text-slate-300">•</span>
+              <button
+                type="button"
+                onClick={() => handleOpenLegal('privacy')}
+                className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+              >
+                2. Privacy Policy
+              </button>
+              <span className="text-slate-300">•</span>
+              <button
+                type="button"
+                onClick={() => handleOpenLegal('refund')}
+                className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+              >
+                3. Refund Policy
+              </button>
+              <span className="text-slate-300">•</span>
+              <button
+                type="button"
+                onClick={() => handleOpenLegal('contact')}
+                className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+              >
+                4. Contact & Legal
+              </button>
+            </div>
           </div>
         </footer>
+      )}
+
+      {/* Legal Documents Modal */}
+      <LegalModal
+        isOpen={legalModalOpen}
+        initialTab={activeLegalTab}
+        onClose={() => setLegalModalOpen(false)}
+      />
+
+      {/* Referral Modal */}
+      {referralModalOpen && (
+        <ReferralCard
+          isModal={true}
+          user={user}
+          schoolName={appData.profile.schoolName}
+          udiseNumber={appData.profile.udiseNumber}
+          onClose={() => setReferralModalOpen(false)}
+        />
       )}
     </div>
   );

@@ -1,4 +1,8 @@
 import { UserAccessRequest, SubscriptionStatus, AdminNotification } from '../types';
+import {
+  recordReferralRegistration,
+  syncReferralStatusWithSubscription,
+} from './referral-store';
 
 const REQUESTS_STORAGE_KEY = 'pm_poshan_access_requests_v1';
 const NOTIFICATIONS_STORAGE_KEY = 'pm_poshan_admin_notifications_v1';
@@ -274,6 +278,23 @@ export function submitAccessRequest(
   // Dispatch Email Notification
   sendAdminEmailNotification(newRequest);
 
+  // If referral code was entered, log referral registration
+  if (data.referralCode) {
+    const refRecord = recordReferralRegistration(newRequest, data.referralCode);
+    if (refRecord) {
+      notifs.unshift({
+        id: 'notif_ref_' + Date.now(),
+        type: 'new_referral',
+        title: 'नवीन रेफरल शाळा नोंदणी!',
+        message: `${refRecord.referredSchoolName} यांनी ${refRecord.referrerCode} (${refRecord.referrerName}) यांच्या रेफरल कोडद्वारे नोंदणी केली.`,
+        timestamp: new Date().toISOString(),
+        read: false,
+        referralId: refRecord.id,
+      });
+      saveAdminNotifications(notifs);
+    }
+  }
+
   return newRequest;
 }
 
@@ -308,6 +329,10 @@ export function approveAccessRequest(
   };
 
   saveRequests(requests);
+
+  // Sync with referral store: Mark referral reward eligible
+  syncReferralStatusWithSubscription(requestId, 'active');
+
   return requests[reqIndex];
 }
 
@@ -358,6 +383,10 @@ export function rejectOrRevokeAccess(
   };
 
   saveRequests(requests);
+
+  // Sync with referral store
+  syncReferralStatusWithSubscription(requestId, 'rejected');
+
   return requests[reqIndex];
 }
 

@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SignInButton, SignUpButton } from '@clerk/react';
+import { LegalModal } from './LegalModal';
+import { LegalDocType } from '../types';
 import {
   BookOpen,
   FileCheck2,
@@ -13,6 +15,13 @@ import {
 } from 'lucide-react';
 
 export const AuthLandingView: React.FC = () => {
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [activeLegalTab, setActiveLegalTab] = useState<LegalDocType>('terms');
+
+  const openLegal = (tab: LegalDocType) => {
+    setActiveLegalTab(tab);
+    setLegalModalOpen(true);
+  };
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-amber-50/30 to-slate-100 flex flex-col justify-between font-sans">
       {/* Top Banner Ribbon */}
@@ -140,15 +149,60 @@ export const AuthLandingView: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer */}
+      {/* Footer with 4 Mandatory Legal Links */}
       <footer className="border-t border-slate-200 bg-white/80 py-4 px-4 text-center text-xs text-slate-500">
-        <p>
-          © 2026 MahaPoshan Register • शाळा व शिक्षकांसाठी खाजगी सॉफ्टवेअर सोल्यूशन (Private Software Solution)
-        </p>
-        <p className="text-[11px] text-slate-400 mt-0.5">
-          सदर ॲप्लिकेशन ही कोणत्याही शासकीय विभागाशी संलग्न अथवा शासनमान्य अधिकृत प्रणाली नसून स्वतंत्र मदत साधन आहे.
-        </p>
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-left sm:text-left">
+            <p className="font-semibold text-slate-700">
+              © 2026 MahaPoshan Register • शाळा व शिक्षकांसाठी खाजगी सॉफ्टवेअर सोल्यूशन
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              सदर ॲप्लिकेशन ही कोणत्याही शासकीय विभागाशी संलग्न अथवा शासनमान्य अधिकृत प्रणाली नसून स्वतंत्र डिजिटल मदत साधन आहे.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
+            <button
+              type="button"
+              onClick={() => openLegal('terms')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              1. Terms & Conditions
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => openLegal('privacy')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              2. Privacy Policy
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => openLegal('refund')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              3. Refund Policy
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => openLegal('contact')}
+              className="text-slate-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+            >
+              4. Contact & Legal
+            </button>
+          </div>
+        </div>
       </footer>
+
+      {/* Legal Documents Modal */}
+      <LegalModal
+        isOpen={legalModalOpen}
+        initialTab={activeLegalTab}
+        onClose={() => setLegalModalOpen(false)}
+      />
     </div>
   );
 };

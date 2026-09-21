@@ -208,15 +208,69 @@ export interface UserAccessRequest {
   expiresAt?: string; // ISO string
   durationMonths?: number;
   notes?: string;
+  // Legal Agreement Audit Trail
+  agreedToTerms?: boolean;
+  agreedAt?: string; // ISO string
+  termsVersion?: string;
+  privacyPolicyVersion?: string;
+  // Referral tracking
+  referralCode?: string;
+}
+
+export type LegalDocType = 'terms' | 'privacy' | 'refund' | 'contact';
+
+export type ReferralRewardStatus = 'pending' | 'eligible' | 'paid' | 'rejected';
+
+export interface ReferralRecord {
+  id: string;
+  referrerCode: string;
+  referrerUserId?: string;
+  referrerName?: string;
+  referrerEmail?: string;
+  referrerSchool?: string;
+  referrerPhone?: string;
+  referrerUpiId?: string;
+  referredSchoolName: string;
+  referredUdise: string;
+  referredUserName: string;
+  referredUserEmail: string;
+  referredPhone?: string;
+  referredRequestId?: string;
+  registeredAt: string; // ISO string
+  registrationStatus: SubscriptionStatus;
+  rewardStatus: ReferralRewardStatus;
+  rewardAmount: number; // in ₹
+  rewardPaidAt?: string; // ISO string
+  rewardPaymentRef?: string; // UPI UTR or Ref ID
+  adminNotes?: string;
+}
+
+export interface ReferralStats {
+  code: string;
+  totalReferred: number;
+  approvedCount: number;
+  pendingCount: number;
+  totalRewardsEarned: number;
+  rewardsPaid: number;
+  rewardsPending: number;
+  referrals: ReferralRecord[];
+}
+
+export interface UserPayoutDetails {
+  userId: string;
+  upiId: string;
+  phone: string;
+  updatedAt: string;
 }
 
 export interface AdminNotification {
   id: string;
-  type: 'new_request' | 'expiring_soon' | 'expired';
+  type: 'new_request' | 'expiring_soon' | 'expired' | 'new_referral';
   title: string;
   message: string;
   timestamp: string; // ISO string
   read: boolean;
   requestId?: string;
+  referralId?: string;
 }
 
