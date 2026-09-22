@@ -470,6 +470,27 @@ export async function syncFullAppDataToCloud(
 }
 
 /**
+ * Purges daily register entries and monthly stock inward records from Supabase
+ * while preserving the user's school profile and account.
+ */
+export async function purgeUserRegisterDataFromCloud(clerkUserId: string): Promise<void> {
+  if (!isSupabaseConfigured() || !clerkUserId) return;
+
+  try {
+    setSyncStatus('syncing');
+    await Promise.allSettled([
+      supabase.from('daily_entries').delete().eq('clerk_user_id', clerkUserId),
+      supabase.from('stock_inward').delete().eq('clerk_user_id', clerkUserId),
+    ]);
+    setSyncStatus('synced');
+    console.log(`Register data (daily entries & stock) successfully purged for user: ${clerkUserId}`);
+  } catch (err) {
+    console.error('Failed to purge register data from cloud:', err);
+    setSyncStatus('error');
+  }
+}
+
+/**
  * Permanently purges all cloud records (school profile, daily registers, stock)
  * for a specific Clerk user when 28 days grace period expires or when explicitly deleted.
  */
@@ -490,3 +511,4 @@ export async function purgeUserDataFromCloud(clerkUserId: string): Promise<void>
     setSyncStatus('error');
   }
 }
+

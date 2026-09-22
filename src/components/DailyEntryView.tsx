@@ -834,11 +834,19 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (
-                            confirm(
-                              `दिनांक ${formatDateIndian(item.date)} ची नोंद खरोखर हटवायची आहे का?`
-                            )
-                          ) {
+                          const ask1 = confirm(
+                            language === 'en'
+                              ? `First Confirmation (विचारणा १): Are you sure you want to delete the daily entry for ${formatDateIndian(item.date)}?`
+                              : `पहिले पुष्टीकरण (विचारणा १): दिनांक ${formatDateIndian(item.date)} ची नोंद खरोखर हटवायची आहे का?`
+                          );
+                          if (!ask1) return;
+
+                          const ask2 = confirm(
+                            language === 'en'
+                              ? `Second & Final Confirmation (विचारणा २): Do you really want to permanently delete this daily entry? This cannot be undone.`
+                              : `दुसरे व अंतिम पुष्टीकरण (विचारणा २): आपण खरोखर ही नोंद कायमची नष्ट करू इच्छिता? ही कृती मागे घेता येणार नाही.`
+                          );
+                          if (ask2) {
                             onDeleteEntry(item.date);
                           }
                         }}

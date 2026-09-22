@@ -298,6 +298,38 @@ export function createDefaultSeedData(): AppData {
 
 export const createDefaultCleanData = createDefaultSeedData;
 
+/**
+ * Creates completely blank, fresh AppData with zero daily entries and empty stock,
+ * preserving school profile if provided.
+ */
+export function createEmptyCleanAppData(profile: SchoolProfile = DEFAULT_SCHOOL_PROFILE): AppData {
+  const appConfig = createDefaultAppConfig(profile, DEFAULT_INGREDIENTS, DEFAULT_RECIPES, 'dual');
+  const cleanData: AppData = {
+    config: appConfig,
+    profile,
+    ingredients: DEFAULT_INGREDIENTS,
+    recipes: DEFAULT_RECIPES,
+    dailyEntries: {},
+    stockInward: {},
+    language: 'dual',
+  };
+  saveAppData(cleanData);
+  return cleanData;
+}
+
+/**
+ * Clears all recorded daily entries and monthly stock inward, keeping school profile and recipe configs intact.
+ */
+export function clearRegisterEntries(data: AppData): AppData {
+  const updated: AppData = {
+    ...data,
+    dailyEntries: {},
+    stockInward: {},
+  };
+  saveAppData(updated);
+  return updated;
+}
+
 
 
 export function exportDataAsJSON(data: AppData): void {

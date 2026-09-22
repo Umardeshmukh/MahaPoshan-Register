@@ -16,6 +16,8 @@ import {
   exportConfigAsJSON,
   createDefaultSeedData,
   createDefaultAppConfig,
+  clearRegisterEntries,
+  createEmptyCleanAppData,
 } from '../lib/storage';
 import {
   OFFICIAL_REGISTER_COLUMNS,
@@ -76,6 +78,8 @@ interface AdminSettingsViewProps {
   onUpdateRecipes: (recipes: DishRecipe[]) => void;
   onRestoreData: (restored: AppData) => void;
   onRecalculateEntries?: (updatedEntries: Record<string, DailyRegisterEntry>) => void;
+  onClearRegisterData?: () => void;
+  onResetAllData?: () => void;
 }
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
@@ -88,6 +92,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   onUpdateRecipes,
   onRestoreData,
   onRecalculateEntries,
+  onClearRegisterData,
+  onResetAllData,
 }) => {
   // Extract or initialize the config node
   const activeConfig = useMemo(() => {
@@ -160,6 +166,74 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const triggerToast = (msg: string) => {
     setSaveToast(msg);
     setTimeout(() => setSaveToast(null), 3500);
+  };
+
+  // 2-Step User Data Deletion Modal state (asks two times)
+  const [deleteModalType, setDeleteModalType] = useState<'register_only' | 'all_data' | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [deleteConfirmText, setDeleteConfirmText] = useState<string>('');
+  const [deleteCheckbox, setDeleteCheckbox] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string>('');
+
+  const handleOpenUserDeleteModal = (type: 'register_only' | 'all_data') => {
+    setDeleteModalType(type);
+    setDeleteStep(1);
+    setDeleteConfirmText('');
+    setDeleteCheckbox(false);
+    setDeleteError('');
+  };
+
+  const handleProceedUserDeleteStep2 = () => {
+    setDeleteStep(2);
+    setDeleteError('');
+  };
+
+  const handleConfirmUserDeletion = () => {
+    if (!deleteCheckbox) {
+      setDeleteError(
+        language === 'en'
+          ? 'Please check the box to confirm you understand this action.'
+          : 'कृपया पुष्टीकरण बॉक्सवर टिक करा.'
+      );
+      return;
+    }
+
+    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') {
+      setDeleteError(
+        language === 'en'
+          ? 'Please type DELETE in capital letters to confirm.'
+          : 'कृपया पुष्टी करण्यासाठी मोठ्या अक्षरात DELETE टाईप करा.'
+      );
+      return;
+    }
+
+    if (deleteModalType === 'register_only') {
+      if (onClearRegisterData) {
+        onClearRegisterData();
+      } else {
+        const cleared = clearRegisterEntries(appData);
+        onRestoreData(cleared);
+      }
+      triggerToast(
+        language === 'en'
+          ? 'All daily register entries and stock data have been deleted.'
+          : 'सर्व दैनिक नोंदी व साठा डेटा यशस्वीरीत्या हटवण्यात आला!'
+      );
+    } else if (deleteModalType === 'all_data') {
+      if (onResetAllData) {
+        onResetAllData();
+      } else {
+        const fresh = createEmptyCleanAppData(appData.profile);
+        onRestoreData(fresh);
+      }
+      triggerToast(
+        language === 'en'
+          ? 'All school data has been reset successfully.'
+          : 'सर्व शाळा डेटा यशस्वीरीत्या हटवून रीसेट करण्यात आला!'
+      );
+    }
+
+    setDeleteModalType(null);
   };
 
   // 1. SAVE GENERAL SETTINGS
@@ -1907,6 +1981,308 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
               </div>
             </div>
 
+          </div>
+
+          {/* Danger Zone: User Data Deletion Card (2-Step Protected) */}
+          <div className="bg-rose-50/50 border border-rose-200 rounded-2xl shadow-xs p-6 space-y-4">
+            <div className="border-b border-rose-200/80 pb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-rose-950 text-base flex items-center gap-2">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
+                  <span>
+                    {language === 'en'
+                      ? 'Danger Zone: Data Deletion & Reset'
+                      : 'धोकादायक क्षेत्र: डेटा हटवणे व रीसेट (Danger Zone)'}
+                  </span>
+                </h3>
+                <p className="text-xs text-rose-800/80 mt-0.5">
+                  {language === 'en'
+                    ? 'Permanently delete your recorded daily registers, stock records, or reset account data.'
+                    : 'तुमचा दैनिक खर्च नोंदवही डेटा, आवक साठा कायमचा हटवा अथवा संपूर्ण डेटा पूर्ववत रीसेट करा.'}
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-rose-200/70 border border-rose-300 text-rose-900 text-[10px] font-bold">
+                {language === 'en' ? '2-Step Confirmation' : '२-टप्प्यांची पुष्टीकरण विचारणा'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              {/* Option A: Delete Register Entries & Stock Only */}
+              <div className="border border-rose-200 rounded-xl p-4 bg-white flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold mb-2">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-bold text-sm text-slate-900">
+                    {language === 'en'
+                      ? 'Clear Register Entries & Stock Data'
+                      : 'नोंदवही व साठा डेटा हटवा'}
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {language === 'en'
+                      ? 'Deletes all daily entries and stock inwards while keeping your school profile and custom rates intact.'
+                      : 'शाळा माहिती व दर सुरक्षित ठेवून फक्त सर्व दैनिक नोंदी आणि धान्यादी मालाचा साठा पुसून टाका.'}
+                  </p>
+                  <div className="mt-2 text-[11px] font-mono text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 space-y-0.5">
+                    <div>
+                      {language === 'en' ? 'Daily Entries:' : 'दैनिक नोंदी:'}{' '}
+                      <strong className="text-rose-700 font-bold">{Object.keys(appData.dailyEntries || {}).length}</strong>
+                    </div>
+                    <div>
+                      {language === 'en' ? 'Stock Months:' : 'साठा महिने:'}{' '}
+                      <strong className="text-rose-700 font-bold">{Object.keys(appData.stockInward || {}).length}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenUserDeleteModal('register_only')}
+                  className="mt-4 w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>
+                    {language === 'en' ? 'Delete Register Data (Ask 2 Times)' : 'नोंदवही डेटा हटवा (२ विचारणा)'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Option B: Reset All School Data */}
+              <div className="border border-rose-300 rounded-xl p-4 bg-white flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-800 flex items-center justify-center font-bold mb-2">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-bold text-sm text-slate-900">
+                    {language === 'en'
+                      ? 'Reset & Delete All School Data'
+                      : 'सर्व शाळा डेटा पूर्णपणे हटवा व रीसेट करा'}
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {language === 'en'
+                      ? 'Completely wipes all recorded entries, stock, custom rates, recipes, and resets to clean initial blank register.'
+                      : 'सर्व नोंदी, साठा, मेन्यू व बदललेले दर पुसून नोंदवही पूर्ववत कोरी (Blank) करा.'}
+                  </p>
+                  <div className="mt-2 text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                    ⚠️ {language === 'en' ? 'Irreversible: Purges from cloud & browser.' : 'कायमचे: क्लाउड व स्थानिक ब्राउझरवरून नष्ट होईल.'}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenUserDeleteModal('all_data')}
+                  className="mt-4 w-full py-2.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>
+                    {language === 'en' ? 'Reset All Data (Ask 2 Times)' : 'सर्व डेटा नष्ट व रीसेट करा (२ विचारणा)'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2-Step User Data Deletion Modal (Asks user 2 times) */}
+      {deleteModalType && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-rose-200 text-xs">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
+                  <Trash2 className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {deleteModalType === 'register_only'
+                        ? (language === 'en' ? 'Delete Register Data' : 'नोंदवही डेटा हटवा')
+                        : (language === 'en' ? 'Reset All School Data' : 'सर्व शाळा डेटा नष्ट व रीसेट करा')}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+                      {deleteStep === 1
+                        ? (language === 'en' ? 'Confirmation 1 of 2' : 'पुष्टीकरण १/२')
+                        : (language === 'en' ? 'Confirmation 2 of 2' : 'पुष्टीकरण २/२')}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {deleteStep === 1
+                      ? (language === 'en' ? 'First Ask: Review data to be deleted' : 'पहिली विचारणा: हटवण्यात येणारा डेटा तपासा')
+                      : (language === 'en' ? 'Second Ask: Final confirmation to erase data' : 'दुसरी विचारणा: डेटा कायमचा नष्ट करण्याचे अंतिम पुष्टीकरण')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteModalType(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* School Context */}
+            <div className="my-3.5 p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 text-xs flex justify-between items-center">
+              <div>
+                <strong className="text-slate-900 block">{appData.profile.schoolName}</strong>
+                <span className="text-[11px] text-slate-500 font-mono">UDISE: {appData.profile.udiseNumber}</span>
+              </div>
+              <div className="text-right text-[11px]">
+                <div className="font-bold text-rose-700">{Object.keys(appData.dailyEntries || {}).length} daily entries</div>
+                <div className="text-slate-500">{Object.keys(appData.stockInward || {}).length} stock months</div>
+              </div>
+            </div>
+
+            {/* STEP 1: First Confirmation Prompt */}
+            {deleteStep === 1 && (
+              <div className="space-y-3.5">
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-xs font-bold text-amber-900">
+                      {language === 'en' ? 'First Confirmation:' : 'पहिले पुष्टीकरण (First Ask):'}
+                    </strong>
+                    <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
+                      {deleteModalType === 'register_only'
+                        ? (language === 'en'
+                            ? 'Are you sure you want to delete all daily entries and stock records? You will be asked once more before data is deleted.'
+                            : 'तुम्हाला खात्री आहे का की तुम्ही सर्व दैनिक नोंदवही नोंदी व साठा तपशील हटवू इच्छिता? यानंतर आणखी एकदा अंतिम विचारणा केली जाईल.')
+                        : (language === 'en'
+                            ? 'Are you sure you want to reset all school data? All records, custom rates, and registers will be cleared. You will be asked once more before deletion.'
+                            : 'तुम्हाला खात्री आहे का की तुम्ही सर्व शाळा डेटा नष्ट करून रीसेट करू इच्छिता? यानंतर अंतिम विचारणा केली जाईल.')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-slate-600 text-[11px]">
+                  <div className="font-bold text-slate-800">
+                    {language === 'en' ? 'What will happen:' : 'या कृतीचे परिणाम:'}
+                  </div>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>
+                      {language === 'en'
+                        ? `All ${Object.keys(appData.dailyEntries || {}).length} recorded daily entries will be removed.`
+                        : `सर्व ${Object.keys(appData.dailyEntries || {}).length} दैनिक नोंदी पुसल्या जातील.`}
+                    </li>
+                    <li>
+                      {language === 'en'
+                        ? `All ${Object.keys(appData.stockInward || {}).length} monthly stock registers will be cleared.`
+                        : `सर्व ${Object.keys(appData.stockInward || {}).length} महिन्यांचा आवक साठा रिकामा होईल.`}
+                    </li>
+                    <li>
+                      {language === 'en'
+                        ? 'Deletions will synchronize with your cloud account.'
+                        : 'क्लाउड सिंकमधील नोंदी देखील तात्काळ पुसल्या जातील.'}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleProceedUserDeleteStep2}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>{language === 'en' ? 'Proceed to Step 2 (Final Confirmation) →' : 'होय, पुढे जा (टप्पा २: अंतिम पुष्टीकरण) →'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalType(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  >
+                    {language === 'en' ? 'Cancel' : 'रद्द करा'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: Second & Final Confirmation */}
+            {deleteStep === 2 && (
+              <div className="space-y-3.5">
+                <div className="p-3.5 bg-rose-100 border border-rose-300 rounded-xl text-rose-950 flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-xs font-bold text-rose-900">
+                      {language === 'en' ? 'Second & Final Confirmation:' : 'दुसरे व अंतिम पुष्टीकरण (Final Ask):'}
+                    </strong>
+                    <p className="text-[11px] text-rose-800 mt-1 leading-relaxed">
+                      {language === 'en'
+                        ? 'This action CANNOT be undone. Once deleted, your data cannot be recovered unless you previously exported a JSON backup.'
+                        : 'ही कृती मागे घेता येणार नाही! एकदा डेटा नष्ट केल्यास तो पुन्हा मिळवता येणार नाही (जोपर्यंत तुमच्याकडे JSON बॅकअप नसेल).'}
+                    </p>
+                  </div>
+                </div>
+
+                {deleteError && (
+                  <div className="p-2.5 bg-rose-100 border border-rose-300 rounded-xl text-rose-800 text-xs font-semibold">
+                    {deleteError}
+                  </div>
+                )}
+
+                {/* Checkbox */}
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <input
+                    type="checkbox"
+                    id="ack-user-delete"
+                    checked={deleteCheckbox}
+                    onChange={(e) => setDeleteCheckbox(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                  />
+                  <label htmlFor="ack-user-delete" className="text-[11px] text-slate-700 cursor-pointer leading-tight">
+                    {language === 'en'
+                      ? 'I understand that this will permanently erase my recorded data from this device and cloud.'
+                      : 'होय, मला समजले आहे की यामुळे माझा नोंदवही डेटा या डिव्हाइसवरून व क्लाउडवरून कायमचा नष्ट होईल.'}
+                  </label>
+                </div>
+
+                {/* Type DELETE */}
+                <div>
+                  <label className="block font-semibold text-slate-800 mb-1">
+                    {language === 'en'
+                      ? 'Type DELETE in capital letters to confirm:'
+                      : 'पुष्टी करण्यासाठी मोठ्या अक्षरात DELETE टाईप करा:'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="DELETE"
+                    value={deleteConfirmText}
+                    onChange={(e) => {
+                      setDeleteConfirmText(e.target.value);
+                      setDeleteError('');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono font-bold text-xs text-slate-900 uppercase focus:outline-hidden focus:ring-2 focus:ring-rose-500 bg-white"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmUserDeletion}
+                    disabled={!deleteCheckbox || deleteConfirmText.trim().toUpperCase() !== 'DELETE'}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>{language === 'en' ? 'Permanently Delete Data Now' : 'होय, डेटा कायमचा नष्ट करा'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteStep(1)}
+                    className="px-3 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  >
+                    {language === 'en' ? 'Back' : 'मागे'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalType(null)}
+                    className="px-3 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  >
+                    {language === 'en' ? 'Cancel' : 'रद्द करा'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

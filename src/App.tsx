@@ -9,7 +9,12 @@ import {
   LanguageMode,
   AppConfig,
 } from './types';
-import { getInitialData, saveAppData } from './lib/storage';
+import {
+  getInitialData,
+  saveAppData,
+  clearRegisterEntries,
+  createEmptyCleanAppData,
+} from './lib/storage';
 import { useUser } from '@clerk/react';
 import { Header } from './components/Header';
 import { DailyEntryView } from './components/DailyEntryView';
@@ -29,6 +34,8 @@ import {
   syncFullAppDataToCloud,
   subscribeSyncStatus,
   SyncStatus,
+  purgeUserRegisterDataFromCloud,
+  purgeUserDataFromCloud,
 } from './lib/cloud-sync';
 import { LegalModal } from './components/LegalModal';
 import { ReferralCard } from './components/ReferralCard';
@@ -276,6 +283,20 @@ export default function App() {
     setAppData(restored);
   };
 
+  const handleClearRegisterData = async () => {
+    setAppData((prev) => clearRegisterEntries(prev));
+    if (user?.id) {
+      await purgeUserRegisterDataFromCloud(user.id);
+    }
+  };
+
+  const handleResetAllData = async () => {
+    setAppData((prev) => createEmptyCleanAppData(prev.profile));
+    if (user?.id) {
+      await purgeUserDataFromCloud(user.id);
+    }
+  };
+
   const handleRecalculateEntries = (
     updatedEntries: Record<string, DailyRegisterEntry>
   ) => {
@@ -402,6 +423,8 @@ export default function App() {
             onUpdateRecipes={handleUpdateRecipes}
             onRestoreData={handleRestoreData}
             onRecalculateEntries={handleRecalculateEntries}
+            onClearRegisterData={handleClearRegisterData}
+            onResetAllData={handleResetAllData}
           />
         )}
 
