@@ -163,6 +163,17 @@ export function getInitialData(): AppData {
     if (saved) {
       const parsed: AppData = JSON.parse(saved);
       if (parsed && (parsed.profile || parsed.config)) {
+        // Detect legacy demo seed data (Borgaon Budruk / 27251403201 / sample 12 entries) and purge it
+        const isLegacyDemo =
+          parsed.profile?.udiseNumber === '27251403201' ||
+          (parsed.profile?.schoolName && parsed.profile.schoolName.includes('बोरगाव')) ||
+          (parsed.dailyEntries && Object.keys(parsed.dailyEntries).length === 12 && !!parsed.dailyEntries['2026-09-01']);
+
+        if (isLegacyDemo) {
+          localStorage.removeItem(STORAGE_KEY);
+          return createEmptyCleanAppData();
+        }
+
         // Merge any newly introduced official ingredients if missing
         if (parsed.ingredients) {
           const existingIds = new Set(parsed.ingredients.map((i: Ingredient) => i.id));
@@ -173,13 +184,12 @@ export function getInitialData(): AppData {
         }
         return syncAppDataConfig(parsed);
       }
-
     }
   } catch (err) {
     console.error('Failed to read from localStorage:', err);
   }
 
-  return createDefaultSeedData();
+  return createEmptyCleanAppData();
 }
 
 export function saveAppData(data: AppData): void {
@@ -296,7 +306,7 @@ export function createDefaultSeedData(): AppData {
   return appData;
 }
 
-export const createDefaultCleanData = createDefaultSeedData;
+export const createDefaultCleanData = createEmptyCleanAppData;
 
 /**
  * Creates completely blank, fresh AppData with zero daily entries and empty stock,

@@ -29,122 +29,23 @@ export interface UserPayoutDetails {
   updatedAt: string;
 }
 
-// Seed demo referral records so Admin can test the dashboard right away
-const SEED_PROFILES: UserReferralProfile[] = [
-  {
-    userId: 'user_demo_pune_01',
-    referralCode: 'MP-PUNE98',
-    userName: 'श्री. रमेश पाटील',
-    userEmail: 'zp.haveli.school@gmail.com',
-    schoolName: 'जि. प. प्राथमिक शाळा, वाघोली',
-    udiseNumber: '27250501201',
-    createdAt: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
-  },
-  {
-    userId: 'user_demo_nashik_02',
-    referralCode: 'MP-NSK44',
-    userName: 'श्रीमती. अनिता जाधव',
-    userEmail: 'dindori.vidyalaya@gmail.com',
-    schoolName: 'आदर्श माध्यमिक विद्यालय, दिंडोरी',
-    udiseNumber: '27200304502',
-    createdAt: new Date(Date.now() - 25 * 86400 * 1000).toISOString(),
-  },
-];
-
-const SEED_PAYOUTS: Record<string, UserPayoutDetails> = {
-  user_demo_pune_01: {
-    userId: 'user_demo_pune_01',
-    upiId: 'ramesh.patil@okhdfcbank',
-    phone: '9822114455',
-    updatedAt: new Date(Date.now() - 20 * 86400 * 1000).toISOString(),
-  },
-  user_demo_nashik_02: {
-    userId: 'user_demo_nashik_02',
-    upiId: 'anita.jadhav@upi',
-    phone: '9423556677',
-    updatedAt: new Date(Date.now() - 15 * 86400 * 1000).toISOString(),
-  },
-};
-
-const SEED_REFERRALS: ReferralRecord[] = [
-  {
-    id: 'ref_seed_1',
-    referrerCode: 'MP-PUNE98',
-    referrerUserId: 'user_demo_pune_01',
-    referrerName: 'श्री. रमेश पाटील',
-    referrerEmail: 'zp.haveli.school@gmail.com',
-    referrerSchool: 'जि. प. प्राथमिक शाळा, वाघोली',
-    referrerPhone: '9822114455',
-    referrerUpiId: 'ramesh.patil@okhdfcbank',
-    referredSchoolName: 'जि. प. शाळा, लोणीकंद',
-    referredUdise: '27250503301',
-    referredUserName: 'श्री. विजय शिंदे',
-    referredUserEmail: 'shinde.lonikand@gmail.com',
-    referredPhone: '9822889900',
-    referredRequestId: 'req_seed_lonikand',
-    registeredAt: new Date(Date.now() - 12 * 86400 * 1000).toISOString(),
-    registrationStatus: 'active',
-    rewardStatus: 'paid',
-    rewardAmount: 100,
-    rewardPaidAt: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),
-    rewardPaymentRef: 'UPI-UTR-49201948123',
-    adminNotes: 'Google Pay द्वारे ₹१०० जमा केले.',
-  },
-  {
-    id: 'ref_seed_2',
-    referrerCode: 'MP-PUNE98',
-    referrerUserId: 'user_demo_pune_01',
-    referrerName: 'श्री. रमेश पाटील',
-    referrerEmail: 'zp.haveli.school@gmail.com',
-    referrerSchool: 'जि. प. प्राथमिक शाळा, वाघोली',
-    referrerPhone: '9822114455',
-    referrerUpiId: 'ramesh.patil@okhdfcbank',
-    referredSchoolName: 'प्राथमिक शाळा, पेरणे फाटा',
-    referredUdise: '27250504402',
-    referredUserName: 'श्रीमती. सुप्रिया कदम',
-    referredUserEmail: 'perne.school@gmail.com',
-    referredPhone: '9822776655',
-    referredRequestId: 'req_seed_perne',
-    registeredAt: new Date(Date.now() - 3 * 86400 * 1000).toISOString(),
-    registrationStatus: 'active',
-    rewardStatus: 'eligible',
-    rewardAmount: 100,
-    adminNotes: 'शाळा मंजूर झाली आहे, बक्षीस वितरण बाकी.',
-  },
-  {
-    id: 'ref_seed_3',
-    referrerCode: 'MP-NSK44',
-    referrerUserId: 'user_demo_nashik_02',
-    referrerName: 'श्रीमती. अनिता जाधव',
-    referrerEmail: 'dindori.vidyalaya@gmail.com',
-    referrerSchool: 'आदर्श माध्यमिक विद्यालय, दिंडोरी',
-    referrerPhone: '9423556677',
-    referrerUpiId: 'anita.jadhav@upi',
-    referredSchoolName: 'जि. प. शाळा, ओझर',
-    referredUdise: '27200305501',
-    referredUserName: 'श्री. सचिन थोरात',
-    referredUserEmail: 'thorat.ozar@gmail.com',
-    referredPhone: '9422334455',
-    referredRequestId: 'req_seed_ozar',
-    registeredAt: new Date(Date.now() - 1 * 86400 * 1000).toISOString(),
-    registrationStatus: 'pending',
-    rewardStatus: 'pending',
-    rewardAmount: 100,
-    adminNotes: 'शाळा नोंदणी विनंती प्रलंबित.',
-  },
-];
+// Clean initial states for referral database
+const SEED_PROFILES: UserReferralProfile[] = [];
+const SEED_PAYOUTS: Record<string, UserPayoutDetails> = {};
+const SEED_REFERRALS: ReferralRecord[] = [];
 
 function loadProfiles(): UserReferralProfile[] {
   try {
     const raw = localStorage.getItem(USER_REFERRAL_PROFILES_KEY);
     if (!raw) {
-      localStorage.setItem(USER_REFERRAL_PROFILES_KEY, JSON.stringify(SEED_PROFILES));
-      return SEED_PROFILES;
+      localStorage.setItem(USER_REFERRAL_PROFILES_KEY, JSON.stringify([]));
+      return [];
     }
-    return JSON.parse(raw);
+    const parsed: UserReferralProfile[] = JSON.parse(raw);
+    return parsed.filter((p) => !p.userId.startsWith('user_demo_'));
   } catch (e) {
     console.error('Failed to load referral profiles', e);
-    return SEED_PROFILES;
+    return [];
   }
 }
 
@@ -160,13 +61,14 @@ function loadReferrals(): ReferralRecord[] {
   try {
     const raw = localStorage.getItem(REFERRAL_RECORDS_KEY);
     if (!raw) {
-      localStorage.setItem(REFERRAL_RECORDS_KEY, JSON.stringify(SEED_REFERRALS));
-      return SEED_REFERRALS;
+      localStorage.setItem(REFERRAL_RECORDS_KEY, JSON.stringify([]));
+      return [];
     }
-    return JSON.parse(raw);
+    const parsed: ReferralRecord[] = JSON.parse(raw);
+    return parsed.filter((r) => !r.id.startsWith('ref_seed_'));
   } catch (e) {
     console.error('Failed to load referral records', e);
-    return SEED_REFERRALS;
+    return [];
   }
 }
 
@@ -182,12 +84,19 @@ function loadPayouts(): Record<string, UserPayoutDetails> {
   try {
     const raw = localStorage.getItem(USER_PAYOUT_DETAILS_KEY);
     if (!raw) {
-      localStorage.setItem(USER_PAYOUT_DETAILS_KEY, JSON.stringify(SEED_PAYOUTS));
-      return SEED_PAYOUTS;
+      localStorage.setItem(USER_PAYOUT_DETAILS_KEY, JSON.stringify({}));
+      return {};
     }
-    return JSON.parse(raw);
+    const parsed: Record<string, UserPayoutDetails> = JSON.parse(raw);
+    const cleaned: Record<string, UserPayoutDetails> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (!k.startsWith('user_demo_')) {
+        cleaned[k] = v;
+      }
+    }
+    return cleaned;
   } catch (e) {
-    return SEED_PAYOUTS;
+    return {};
   }
 }
 

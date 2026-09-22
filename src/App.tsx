@@ -103,31 +103,64 @@ export default function App() {
   useEffect(() => {
     if (isSignedIn && user?.id) {
       pullUserDataFromCloud(user.id).then((cloudData) => {
-        if (cloudData && (cloudData.profile || cloudData.dailyEntries || cloudData.stockInward)) {
+        const hasCloudEntries =
+          cloudData?.dailyEntries && Object.keys(cloudData.dailyEntries).length > 0;
+        const hasCloudStock =
+          cloudData?.stockInward && Object.keys(cloudData.stockInward).length > 0;
+        const hasCloudProfile =
+          !!(cloudData?.profile && cloudData.profile.schoolName && !cloudData.profile.schoolName.includes('बोरगाव'));
+
+        if (hasCloudProfile || hasCloudEntries || hasCloudStock) {
           setAppData((prev) => {
             const merged: AppData = {
               ...prev,
-              profile: cloudData.profile || prev.profile,
-              dailyEntries: {
-                ...prev.dailyEntries,
-                ...(cloudData.dailyEntries || {}),
-              },
-              stockInward: {
-                ...prev.stockInward,
-                ...(cloudData.stockInward || {}),
-              },
+              profile: hasCloudProfile && cloudData?.profile ? cloudData.profile : prev.profile,
+              dailyEntries: cloudData?.dailyEntries || {},
+              stockInward: cloudData?.stockInward || {},
             };
             saveAppData(merged);
             return merged;
           });
         } else {
-          // Initial background backup of local records to Supabase
-          syncFullAppDataToCloud(
-            appData,
-            user.id,
-            user.primaryEmailAddress?.emailAddress,
-            user.fullName || undefined
-          );
+          // Brand new user signup or clean cloud database
+          // Ensure zero daily entries and zero stock inward
+          const access = getUserAccessStatus(user.id, user.primaryEmailAddress?.emailAddress);
+          const req = access.request;
+
+          setAppData((prev) => {
+            const cleanProfile: SchoolProfile = {
+              schoolName: req?.schoolName || prev.profile.schoolName || '',
+              udiseNumber: req?.udiseNumber || prev.profile.udiseNumber || '',
+              centerCluster: req?.centerCluster || prev.profile.centerCluster || '',
+              standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
+              district: req?.district || prev.profile.district || '',
+              taluka: prev.profile.taluka || '',
+              headmasterName: req?.userName || user.fullName || prev.profile.headmasterName || '',
+              inchargeTeacher: prev.profile.inchargeTeacher || '',
+              cookName: prev.profile.cookName || '',
+            };
+
+            const cleanApp: AppData = {
+              ...prev,
+              profile: cleanProfile,
+              dailyEntries: {}, // Clean database: absolutely NO entries for a new user
+              stockInward: {},  // Clean database: absolutely NO stock inward for a new user
+            };
+
+            saveAppData(cleanApp);
+
+            // Sync clean school profile to cloud only if schoolName was provided
+            if (cleanProfile.schoolName) {
+              syncSchoolProfileToCloud(
+                cleanProfile,
+                user.id,
+                user.primaryEmailAddress?.emailAddress,
+                user.fullName || undefined
+              ).catch((err) => console.warn('Profile sync notice:', err));
+            }
+
+            return cleanApp;
+          });
         }
       });
     }
@@ -322,6 +355,30 @@ export default function App() {
     user?.id,
     user?.primaryEmailAddress?.emailAddress
   );
+
+  // Auto-sync school profile from user's access registration request if current profile school name is empty
+  useEffect(() => {
+    if (isSignedIn && accessStatus.request?.schoolName && !appData.profile.schoolName) {
+      const req = accessStatus.request;
+      setAppData((prev) => {
+        if (prev.profile.schoolName) return prev;
+        const updatedProfile: SchoolProfile = {
+          ...prev.profile,
+          schoolName: req.schoolName,
+          udiseNumber: req.udiseNumber || prev.profile.udiseNumber,
+          centerCluster: req.centerCluster || prev.profile.centerCluster,
+          district: req.district || prev.profile.district,
+          headmasterName: req.userName || prev.profile.headmasterName,
+        };
+        const updated: AppData = {
+          ...prev,
+          profile: updatedProfile,
+        };
+        saveAppData(updated);
+        return updated;
+      });
+    }
+  }, [isSignedIn, accessStatus.request, appData.profile.schoolName]);
 
   // 1. Super Admin Secret Route Gate: /super-admin or #super-admin
   if (isSuperAdminRoute) {

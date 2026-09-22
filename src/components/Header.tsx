@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>स्थानिक डेटा</span>
               </span>
             )}
-            <span>UDISE: {profile.udiseNumber || '27251403201'}</span>
+            <span>UDISE: {profile.udiseNumber || 'नोंदणी आवश्यक'}</span>
           </div>
         </div>
 
@@ -87,11 +87,11 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div className="min-w-0">
               <h1 className="font-bold text-slate-900 text-sm sm:text-base leading-snug truncate">
-                {profile.schoolName}
+                {profile.schoolName || 'शाळा प्रोफाइल (School Profile)'}
               </h1>
               <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
                 <School className="w-3 h-3 text-slate-400 shrink-0" />
-                <span className="truncate">केंद्र: {profile.centerCluster}</span>
+                <span className="truncate">केंद्र: {profile.centerCluster || 'नोंदवलेले नाही'}</span>
                 <span>•</span>
                 <span className="text-amber-800 font-medium">दैनिक खर्च नोंदवही</span>
               </p>

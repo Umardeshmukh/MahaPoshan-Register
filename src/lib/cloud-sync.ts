@@ -87,12 +87,22 @@ export async function pullUserDataFromCloud(
         udiseNumber: schoolRes.data.udise_number || '',
         centerCluster: schoolRes.data.center_cluster || '',
         standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
-        district: schoolRes.data.district || 'पुणे',
+        district: schoolRes.data.district || '',
         taluka: schoolRes.data.taluka || '',
         headmasterName: schoolRes.data.headmaster_name || '',
         inchargeTeacher: schoolRes.data.incharge_teacher || '',
         cookName: schoolRes.data.cook_name || '',
       };
+    }
+
+    // Clean out legacy demo seed pollution if encountered
+    const isLegacyDemo =
+      profile?.udiseNumber === '27251403201' ||
+      (profile?.schoolName && profile.schoolName.includes('बोरगाव'));
+
+    if (isLegacyDemo) {
+      purgeUserRegisterDataFromCloud(clerkUserId).catch(() => {});
+      return null;
     }
 
     if (entriesRes.data && entriesRes.data.length > 0) {
@@ -272,6 +282,9 @@ export async function syncSchoolProfileToCloud(
   userName?: string
 ): Promise<void> {
   if (!isSupabaseConfigured() || !clerkUserId) return;
+  // Never upload empty or legacy demo seed profile
+  if (!profile.schoolName && !profile.udiseNumber) return;
+  if (profile.udiseNumber === '27251403201' || profile.schoolName.includes('बोरगाव')) return;
 
   try {
     setSyncStatus('syncing');
@@ -412,6 +425,13 @@ export async function syncFullAppDataToCloud(
   userName?: string
 ): Promise<void> {
   if (!isSupabaseConfigured() || !clerkUserId) return;
+  // Never upload legacy demo data
+  if (
+    data.profile?.udiseNumber === '27251403201' ||
+    (data.profile?.schoolName && data.profile.schoolName.includes('बोरगाव'))
+  ) {
+    return;
+  }
 
   try {
     setSyncStatus('syncing');

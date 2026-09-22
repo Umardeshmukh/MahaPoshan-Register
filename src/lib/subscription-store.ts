@@ -24,51 +24,9 @@ const DEFAULT_CONFIG: SuperAdminConfig = {
   emailAlertsEnabled: true,
 };
 
-// Seed demo requests if empty so the Super Admin can test immediately
-const SEED_REQUESTS: UserAccessRequest[] = [
-  {
-    id: 'req_seed_1',
-    clerkUserId: 'user_demo_pune_01',
-    userEmail: 'zp.haveli.school@gmail.com',
-    userName: 'श्री. रमेश पाटील',
-    schoolName: 'जि. प. प्राथमिक शाळा, वाघोली',
-    udiseNumber: '27250501201',
-    centerCluster: 'वाघोली',
-    district: 'पुणे',
-    phone: '9822114455',
-    status: 'pending',
-    requestedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-    notes: 'वार्षिक नोंदवहीसाठी नोंदणी हवी आहे.',
-  },
-  {
-    id: 'req_seed_2',
-    clerkUserId: 'user_demo_nashik_02',
-    userEmail: 'dindori.vidyalaya@gmail.com',
-    userName: 'श्रीमती. अनिता जाधव',
-    schoolName: 'आदर्श माध्यमिक विद्यालय, दिंडोरी',
-    udiseNumber: '27200304502',
-    centerCluster: 'दिंडोरी',
-    district: 'नाशिक',
-    phone: '9423556677',
-    status: 'active',
-    requestedAt: new Date(Date.now() - 20 * 86400 * 1000).toISOString(),
-    approvedAt: new Date(Date.now() - 19 * 86400 * 1000).toISOString(),
-    durationMonths: 6,
-    expiresAt: new Date(Date.now() + 160 * 86400 * 1000).toISOString(),
-  },
-];
-
-const SEED_NOTIFICATIONS: AdminNotification[] = [
-  {
-    id: 'notif_seed_1',
-    type: 'new_request',
-    title: 'नवीन नोंदणी विनंती',
-    message: 'जि. प. प्राथमिक शाळा, वाघोली (zp.haveli.school@gmail.com) यांनी प्रवेश विनंती केली आहे.',
-    timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-    read: false,
-    requestId: 'req_seed_1',
-  },
-];
+// Clean default states - no demo requests or notifications
+const SEED_REQUESTS: UserAccessRequest[] = [];
+const SEED_NOTIFICATIONS: AdminNotification[] = [];
 
 /**
  * Automatically purges any requests whose 28-day soft-deletion grace period has expired.
@@ -105,14 +63,15 @@ function loadRequests(): UserAccessRequest[] {
   try {
     const raw = localStorage.getItem(REQUESTS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(REQUESTS_STORAGE_KEY, JSON.stringify(SEED_REQUESTS));
-      return SEED_REQUESTS;
+      localStorage.setItem(REQUESTS_STORAGE_KEY, JSON.stringify([]));
+      return [];
     }
     const parsed: UserAccessRequest[] = JSON.parse(raw);
-    return purgeExpiredDeletions(parsed);
+    const cleaned = parsed.filter((r) => !r.id.startsWith('req_seed_'));
+    return purgeExpiredDeletions(cleaned);
   } catch (e) {
     console.error('Failed to load access requests from localStorage', e);
-    return SEED_REQUESTS;
+    return [];
   }
 }
 
@@ -128,13 +87,14 @@ export function getAdminNotifications(): AdminNotification[] {
   try {
     const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(SEED_NOTIFICATIONS));
-      return SEED_NOTIFICATIONS;
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify([]));
+      return [];
     }
-    return JSON.parse(raw);
+    const parsed: AdminNotification[] = JSON.parse(raw);
+    return parsed.filter((n) => !n.id.startsWith('notif_seed_'));
   } catch (e) {
     console.error('Failed to load notifications', e);
-    return SEED_NOTIFICATIONS;
+    return [];
   }
 }
 

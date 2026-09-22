@@ -1,15 +1,15 @@
 import { Ingredient, DishRecipe, SchoolProfile } from '../types';
 
 export const DEFAULT_SCHOOL_PROFILE: SchoolProfile = {
-  schoolName: 'जिल्हा परिषद प्राथमिक शाळा, बोरगाव बुद्रुक',
-  udiseNumber: '27251403201',
-  centerCluster: 'बोरगाव (केंद्र)',
+  schoolName: '',
+  udiseNumber: '',
+  centerCluster: '',
   standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
-  district: 'पुणे',
-  taluka: 'हवेली',
-  headmasterName: 'श्री. स. बा. पाटील',
-  inchargeTeacher: 'श्रीमती अ. वि. कुलकर्णी',
-  cookName: 'श्रीमती सुलोचनाबाई कांबळे',
+  district: '',
+  taluka: '',
+  headmasterName: '',
+  inchargeTeacher: '',
+  cookName: '',
 };
 
 export const DEFAULT_INGREDIENTS: Ingredient[] = [
