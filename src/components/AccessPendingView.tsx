@@ -88,12 +88,22 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
     }
   }, [referralCode, user?.id]);
 
+  // Periodically check live approval status from Supabase Cloud
+  useEffect(() => {
+    if (status !== 'active') {
+      const interval = setInterval(() => {
+        onRefresh();
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [status, onRefresh]);
+
   const openLegalDoc = (tab: LegalDocType) => {
     setActiveLegalTab(tab);
     setLegalModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!schoolName || !udiseNumber) {
       alert('कृपया शाळेचे नाव आणि UDISE क्रमांक भरा.');
@@ -129,8 +139,8 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
         privacyPolicyVersion: CURRENT_PRIVACY_VERSION,
       });
 
-      // Also persist to Supabase schools table
-      syncSchoolProfileToCloud(
+      // Also persist profile to Supabase schools table
+      await syncSchoolProfileToCloud(
         {
           schoolName,
           udiseNumber,

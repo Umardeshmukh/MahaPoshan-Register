@@ -21,6 +21,7 @@ import {
   updateSuperAdminConfig,
   sendAdminEmailNotification,
   DEFAULT_SUPER_ADMIN_PASSCODE,
+  syncAllRequestsFromCloud,
 } from '../lib/subscription-store';
 import {
   getAllReferrals,
@@ -119,11 +120,23 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const [purgeError, setPurgeError] = useState('');
   const [showPurgePasscode, setShowPurgePasscode] = useState(false);
 
-  const loadData = () => {
+  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+
+  const loadData = async () => {
     setRequests(getAllAccessRequests());
     setReferrals(getAllReferrals());
     setNotifications(getAdminNotifications());
     setConfig(getSuperAdminConfig());
+
+    setIsLoadingCloud(true);
+    try {
+      const liveRequests = await syncAllRequestsFromCloud();
+      setRequests(liveRequests);
+    } catch (err) {
+      console.warn('Failed to load live requests from Supabase:', err);
+    } finally {
+      setIsLoadingCloud(false);
+    }
   };
 
   useEffect(() => {
@@ -654,10 +667,11 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 <button
                   type="button"
                   onClick={loadData}
-                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
-                  title="Refresh"
+                  disabled={isLoadingCloud}
+                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Refresh live data from Supabase Cloud"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCloud ? 'animate-spin text-amber-600' : ''}`} />
                 </button>
               </div>
             </div>

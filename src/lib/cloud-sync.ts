@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase-client';
-import { AppData, DailyRegisterEntry, MonthlyStockInward, SchoolProfile } from '../types';
+import { AppData, DailyRegisterEntry, MonthlyStockInward, SchoolProfile, UserAccessRequest, SubscriptionStatus } from '../types';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
 
@@ -289,20 +289,15 @@ export async function syncSchoolProfileToCloud(
   try {
     setSyncStatus('syncing');
 
-    const row = {
+    const row: any = {
       clerk_user_id: clerkUserId,
       user_email: userEmail || 'school@example.com',
       user_name: userName || profile.headmasterName || 'मुख्याध्यापक',
       school_name: profile.schoolName,
       udise_number: profile.udiseNumber,
-      center_cluster: profile.centerCluster,
-      district: profile.district,
-      taluka: profile.taluka || '',
-      headmaster_name: profile.headmasterName || '',
-      incharge_teacher: profile.inchargeTeacher || '',
-      cook_name: profile.cookName || '',
+      center_cluster: profile.centerCluster || '',
+      district: profile.district || '',
       updated_at: new Date().toISOString(),
-      updated_by: clerkUserId,
     };
 
     const { data, error } = await supabase
@@ -324,6 +319,176 @@ export async function syncSchoolProfileToCloud(
   } catch (err) {
     console.error('Failed to sync school profile to Supabase:', err);
     setSyncStatus('error');
+  }
+}
+
+/**
+ * Upserts a school access request into Supabase schools table so Super Admin can see it immediately.
+ */
+export async function syncAccessRequestToCloud(request: UserAccessRequest): Promise<boolean> {
+  if (!isSupabaseConfigured() || !request.clerkUserId) return false;
+
+  try {
+    setSyncStatus('syncing');
+
+    const row: any = {
+      clerk_user_id: request.clerkUserId,
+      user_email: request.userEmail,
+      user_name: request.userName || '',
+      school_name: request.schoolName,
+      udise_number: request.udiseNumber,
+      center_cluster: request.centerCluster || '',
+      district: request.district || '',
+      phone: request.phone || '',
+      notes: request.notes || '',
+      status: request.status || 'pending',
+      updated_at: new Date().toISOString(),
+    };
+
+    if (request.durationMonths !== undefined) row.duration_months = request.durationMonths;
+    if (request.expiresAt !== undefined) row.expires_at = request.expiresAt;
+
+    const { data, error } = await supabase
+      .from('schools')
+      .upsert(row, { onConflict: 'clerk_user_id' })
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Failed to sync access request to Supabase:', error);
+      setSyncStatus('error');
+      return false;
+    }
+
+    if (data?.id) {
+      cachedSchoolId = data.id;
+    }
+
+    setSyncStatus('synced');
+    return true;
+  } catch (err) {
+    console.error('Error syncing access request to Supabase:', err);
+    setSyncStatus('error');
+    return false;
+  }
+}
+
+/**
+ * Fetches all school registrations and access requests from Supabase Cloud.
+ * Used by Super Admin Panel to see requests across all users and devices.
+ */
+export async function fetchAllSchoolsFromCloud(): Promise<UserAccessRequest[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('Failed to fetch schools from Supabase:', error);
+      return [];
+    }
+
+    if (!data) return [];
+
+    return data.map((row: any): UserAccessRequest => ({
+      id: row.id || ('req_' + row.clerk_user_id),
+      clerkUserId: row.clerk_user_id,
+      userEmail: row.user_email || '',
+      userName: row.user_name || '',
+      schoolName: row.school_name,
+      udiseNumber: row.udise_number,
+      centerCluster: row.center_cluster || '',
+      district: row.district || '',
+      phone: row.phone || '',
+      notes: row.notes || '',
+      status: (row.status as SubscriptionStatus) || 'pending',
+      durationMonths: row.duration_months || undefined,
+      expiresAt: row.expires_at || undefined,
+      requestedAt: row.created_at || new Date().toISOString(),
+      approvedAt: row.status === 'active' ? row.updated_at : undefined,
+    }));
+  } catch (err) {
+    console.error('Error fetching schools from cloud:', err);
+    return [];
+  }
+}
+
+/**
+ * Updates a school's subscription/access status directly in Supabase.
+ */
+export async function updateSchoolStatusInCloud(
+  clerkUserId: string,
+  status: SubscriptionStatus,
+  durationMonths?: number,
+  expiresAt?: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !clerkUserId) return false;
+
+  try {
+    const payload: any = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    if (durationMonths !== undefined) payload.duration_months = durationMonths;
+    if (expiresAt !== undefined) payload.expires_at = expiresAt;
+
+    const { error } = await supabase
+      .from('schools')
+      .update(payload)
+      .eq('clerk_user_id', clerkUserId);
+
+    if (error) {
+      console.error('Failed to update school status in Supabase:', error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error updating school status in cloud:', err);
+    return false;
+  }
+}
+
+/**
+ * Fetches the user's latest school registration and status from Supabase.
+ */
+export async function fetchUserSchoolFromCloud(
+  clerkUserId: string
+): Promise<UserAccessRequest | null> {
+  if (!isSupabaseConfigured() || !clerkUserId) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('*')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id || ('req_' + data.clerk_user_id),
+      clerkUserId: data.clerk_user_id,
+      userEmail: data.user_email || '',
+      userName: data.user_name || '',
+      schoolName: data.school_name,
+      udiseNumber: data.udise_number,
+      centerCluster: data.center_cluster || '',
+      district: data.district || '',
+      phone: data.phone || '',
+      notes: data.notes || '',
+      status: (data.status as SubscriptionStatus) || 'pending',
+      durationMonths: data.duration_months || undefined,
+      expiresAt: data.expires_at || undefined,
+      requestedAt: data.created_at || new Date().toISOString(),
+      approvedAt: data.status === 'active' ? data.updated_at : undefined,
+    };
+  } catch (err) {
+    console.error('Error fetching user school from cloud:', err);
+    return null;
   }
 }
 

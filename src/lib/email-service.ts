@@ -14,43 +14,48 @@ export interface SendEmailResponse {
   error?: any;
 }
 
-/**
- * Sends an email via the /api/send-email endpoint (backed by Resend).
- */
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResponse> {
-  try {
-    const response = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(options),
-    });
+  const endpoints = ['/api/send-email', '/.netlify/functions/send-email'];
 
-    const data = await response.json();
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(options),
+      });
 
-    if (!response.ok || !data.success) {
-      console.warn('Resend email failed:', data);
-      return {
-        success: false,
-        message: data.error?.message || data.error || 'Failed to send email',
-        error: data.error,
-      };
+      const text = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        // Returned HTML (e.g. 404/redirect), try next endpoint
+        continue;
+      }
+
+      if (response.ok && data.success) {
+        return {
+          success: true,
+          message: 'Email successfully sent via Resend',
+          id: data.data?.id,
+        };
+      }
+
+      if (data && data.error) {
+        console.warn(`Resend email endpoint ${endpoint} returned error:`, data.error);
+      }
+    } catch (error: any) {
+      console.warn(`Attempt on ${endpoint} failed:`, error?.message);
     }
-
-    return {
-      success: true,
-      message: 'Email successfully sent via Resend',
-      id: data.data?.id,
-    };
-  } catch (error: any) {
-    console.error('Failed to dispatch email request:', error);
-    return {
-      success: false,
-      message: error?.message || 'Network error while sending email',
-      error,
-    };
   }
+
+  return {
+    success: false,
+    message: 'Failed to dispatch email via serverless endpoints',
+  };
 }
 
 /**

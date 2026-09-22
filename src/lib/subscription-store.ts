@@ -3,7 +3,13 @@ import {
   recordReferralRegistration,
   syncReferralStatusWithSubscription,
 } from './referral-store';
-import { purgeUserDataFromCloud } from './cloud-sync';
+import {
+  purgeUserDataFromCloud,
+  syncAccessRequestToCloud,
+  fetchAllSchoolsFromCloud,
+  updateSchoolStatusInCloud,
+  fetchUserSchoolFromCloud,
+} from './cloud-sync';
 
 const REQUESTS_STORAGE_KEY = 'pm_poshan_access_requests_v1';
 const NOTIFICATIONS_STORAGE_KEY = 'pm_poshan_admin_notifications_v1';
@@ -272,6 +278,11 @@ export function submitAccessRequest(
   }
   saveRequests(requests);
 
+  // Immediately persist to Supabase schools table so Super Admin can see it across devices
+  syncAccessRequestToCloud(newRequest).catch((err) =>
+    console.warn('Supabase access request sync notice:', err)
+  );
+
   // Trigger In-App notification
   const notifs = getAdminNotifications();
   const newNotif: AdminNotification = {
@@ -341,10 +352,102 @@ export function approveAccessRequest(
 
   saveRequests(requests);
 
+  // Sync approval to Supabase schools table
+  if (requests[reqIndex].clerkUserId) {
+    updateSchoolStatusInCloud(
+      requests[reqIndex].clerkUserId,
+      'active',
+      durationMonths,
+      expiry.toISOString()
+    ).catch((err) => console.warn('Supabase status update error:', err));
+  }
+
   // Sync with referral store: Mark referral reward eligible
   syncReferralStatusWithSubscription(requestId, 'active');
 
   return requests[reqIndex];
+}
+
+/**
+ * Loads all school requests from Supabase Cloud and synchronizes local storage.
+ * Used by Super Admin Panel to see requests from any user and device in real time.
+ */
+export async function syncAllRequestsFromCloud(): Promise<UserAccessRequest[]> {
+  const cloudSchools = await fetchAllSchoolsFromCloud();
+  if (cloudSchools.length === 0) {
+    return loadRequests();
+  }
+
+  const localRequests = loadRequests();
+  const mergedMap = new Map<string, UserAccessRequest>();
+
+  // Add local requests first
+  localRequests.forEach((r) => {
+    if (r.clerkUserId) mergedMap.set(r.clerkUserId, r);
+    else mergedMap.set(r.id, r);
+  });
+
+  // Cloud is the master source of truth - merge with cloud data
+  cloudSchools.forEach((c) => {
+    const key = c.clerkUserId || c.id;
+    const existing = mergedMap.get(key);
+    if (existing) {
+      mergedMap.set(key, {
+        ...existing,
+        ...c,
+        phone: c.phone || existing.phone,
+        notes: c.notes || existing.notes,
+      });
+    } else {
+      mergedMap.set(key, c);
+    }
+  });
+
+  const merged = Array.from(mergedMap.values()).sort(
+    (a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
+  );
+
+  saveRequests(merged);
+  return merged;
+}
+
+/**
+ * Checks live access status directly against Supabase for a given user.
+ * Updates local cache if cloud status has changed.
+ */
+export async function checkCloudAccessStatus(
+  clerkUserId?: string,
+  userEmail?: string
+): Promise<SubscriptionStatus | null> {
+  if (!clerkUserId) return null;
+
+  try {
+    const cloudRecord = await fetchUserSchoolFromCloud(clerkUserId);
+    if (!cloudRecord) return null;
+
+    const requests = loadRequests();
+    const idx = requests.findIndex(
+      (r) =>
+        r.clerkUserId === clerkUserId ||
+        (userEmail && r.userEmail.toLowerCase().trim() === userEmail.toLowerCase().trim())
+    );
+
+    if (idx >= 0) {
+      requests[idx] = {
+        ...requests[idx],
+        ...cloudRecord,
+      };
+      saveRequests(requests);
+    } else {
+      requests.unshift(cloudRecord);
+      saveRequests(requests);
+    }
+
+    return cloudRecord.status;
+  } catch (err) {
+    console.error('Failed to check cloud access status:', err);
+    return null;
+  }
 }
 
 /**

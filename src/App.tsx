@@ -24,7 +24,7 @@ import { OfficialPrintView } from './components/OfficialPrintView';
 import { AuthLandingView } from './components/AuthLandingView';
 import { AccessPendingView } from './components/AccessPendingView';
 import { SuperAdminPanel } from './components/SuperAdminPanel';
-import { getUserAccessStatus } from './lib/subscription-store';
+import { getUserAccessStatus, checkCloudAccessStatus } from './lib/subscription-store';
 import {
   pullUserDataFromCloud,
   syncDailyEntryToCloud,
@@ -379,6 +379,17 @@ export default function App() {
       });
     }
   }, [isSignedIn, accessStatus.request, appData.profile.schoolName]);
+
+  // Check live access status directly against Supabase on login / refresh
+  useEffect(() => {
+    if (isSignedIn && user?.id) {
+      checkCloudAccessStatus(user.id, user.primaryEmailAddress?.emailAddress).then((liveStatus) => {
+        if (liveStatus && liveStatus !== accessStatus.status) {
+          setAccessRefreshTrigger((c) => c + 1);
+        }
+      });
+    }
+  }, [isSignedIn, user?.id, accessRefreshTrigger, accessStatus.status]);
 
   // 1. Super Admin Secret Route Gate: /super-admin or #super-admin
   if (isSuperAdminRoute) {
