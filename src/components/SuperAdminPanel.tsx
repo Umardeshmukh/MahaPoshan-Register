@@ -11,6 +11,9 @@ import {
   rejectOrRevokeAccess,
   extendSubscription,
   deleteAccessRequest,
+  scheduleAccountDeletion,
+  cancelAccountDeletion,
+  permanentPurgeAccount,
   getAdminNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
@@ -50,6 +53,11 @@ import {
   Wallet,
   Copy,
   Check,
+  RotateCcw,
+  Lock,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface SuperAdminPanelProps {
@@ -96,6 +104,21 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   // Email Test alert status
   const [emailStatusMsg, setEmailStatusMsg] = useState<string | null>(null);
 
+  // 2-Step Password-Protected Deletion Modal State
+  const [deleteModalRequest, setDeleteModalRequest] = useState<UserAccessRequest | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [deletePasscode, setDeletePasscode] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [showDeletePasscode, setShowDeletePasscode] = useState(false);
+
+  // Immediate Purge Modal State (Passcode Protected)
+  const [purgeModalRequest, setPurgeModalRequest] = useState<UserAccessRequest | null>(null);
+  const [purgePasscode, setPurgePasscode] = useState('');
+  const [purgeError, setPurgeError] = useState('');
+  const [showPurgePasscode, setShowPurgePasscode] = useState(false);
+
   const loadData = () => {
     setRequests(getAllAccessRequests());
     setReferrals(getAllReferrals());
@@ -115,7 +138,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
       setIsAuthenticated(true);
       setAuthError('');
     } else {
-      setAuthError('अवैध ॲडमिन पासवर्ड (Invalid Passcode)');
+      setAuthError('Invalid Admin Passcode');
     }
   };
 
@@ -153,7 +176,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   };
 
   const handleReject = (id: string) => {
-    const reason = prompt('नामंजूर करण्याचे कारण लिहा (किंवा रिकामे ठेवा):');
+    const reason = prompt('Enter reason for rejection (or leave blank):');
     if (reason !== null) {
       rejectOrRevokeAccess(id, reason);
       loadData();
@@ -165,20 +188,80 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     loadData();
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('तुम्हाला ही विनंती कायमची हटवायची आहे का?')) {
-      deleteAccessRequest(id);
-      loadData();
+  // Deletion Handlers
+  const handleOpenDeleteModal = (req: UserAccessRequest) => {
+    setDeleteModalRequest(req);
+    setDeleteStep(1);
+    setDeletePasscode('');
+    setDeleteError('');
+    setDeleteReason('');
+    setDeleteAcknowledged(false);
+    setShowDeletePasscode(false);
+  };
+
+  const handleProceedToStep2 = () => {
+    setDeleteStep(2);
+    setDeleteError('');
+  };
+
+  const handleConfirmScheduleDeletion = () => {
+    if (!deleteModalRequest) return;
+    const currentConfig = getSuperAdminConfig();
+    const valid =
+      deletePasscode.trim() === currentConfig.passcode ||
+      deletePasscode.trim() === DEFAULT_SUPER_ADMIN_PASSCODE;
+
+    if (!valid) {
+      setDeleteError('Invalid Admin Passcode! Account could not be deleted.');
+      return;
     }
+
+    if (!deleteAcknowledged) {
+      setDeleteError('Please check the confirmation box to acknowledge the 28-day retention policy.');
+      return;
+    }
+
+    scheduleAccountDeletion(deleteModalRequest.id, deleteReason);
+    setDeleteModalRequest(null);
+    loadData();
+  };
+
+  const handleCancelDelete = (id: string) => {
+    cancelAccountDeletion(id);
+    loadData();
+  };
+
+  const handleOpenPurgeModal = (req: UserAccessRequest) => {
+    setPurgeModalRequest(req);
+    setPurgePasscode('');
+    setPurgeError('');
+    setShowPurgePasscode(false);
+  };
+
+  const handleConfirmImmediatePurge = () => {
+    if (!purgeModalRequest) return;
+    const currentConfig = getSuperAdminConfig();
+    const valid =
+      purgePasscode.trim() === currentConfig.passcode ||
+      purgePasscode.trim() === DEFAULT_SUPER_ADMIN_PASSCODE;
+
+    if (!valid) {
+      setPurgeError('Invalid Admin Passcode! Could not permanently purge.');
+      return;
+    }
+
+    permanentPurgeAccount(purgeModalRequest.id);
+    setPurgeModalRequest(null);
+    loadData();
   };
 
   const handleTestEmail = async () => {
-    setEmailStatusMsg('Resend द्वारे चाचणी ईमेल पाठवत आहे...');
+    setEmailStatusMsg('Sending test email via Resend...');
     const res = await sendTestEmail(config.adminEmail);
     if (res.success) {
-      setEmailStatusMsg(`✔ चाचणी ईमेल ${config.adminEmail} वर Resend द्वारे यशस्वीरीत्या पाठवला! (ID: ${res.id || 'ok'})`);
+      setEmailStatusMsg(`✔ Test email sent successfully to ${config.adminEmail}! (ID: ${res.id || 'ok'})`);
     } else {
-      setEmailStatusMsg(`❌ त्रुटी: ${res.message}`);
+      setEmailStatusMsg(`❌ Error: ${res.message}`);
     }
     setTimeout(() => setEmailStatusMsg(null), 7000);
   };
@@ -186,6 +269,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   // Metrics
   const pendingRequests = requests.filter((r) => r.status === 'pending');
   const activeSubscriptions = requests.filter((r) => r.status === 'active');
+  const pendingDeletions = requests.filter((r) => r.status === 'pending_deletion');
   const unreadNotifications = notifications.filter((n) => !n.read);
 
   // Passcode Gate Screen
@@ -198,27 +282,27 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
           </div>
 
           <h2 className="text-xl font-bold text-center text-white">
-            Super Admin कन्सोल
+            Super Admin Console
           </h2>
           <p className="text-xs text-center text-slate-400 mt-1">
-            MahaPoshan Register • सुरक्षित डेव्हलपर प्रवेशद्वार
+            MahaPoshan Register • Secure Developer Gateway
           </p>
 
           {currentUserEmail && (
             <div className="mt-4 p-2.5 rounded-xl bg-slate-900/60 border border-slate-700 text-center text-xs text-slate-300">
-              लॉग इन ईमेल: <span className="font-mono text-amber-300">{currentUserEmail}</span>
+              Logged in as: <span className="font-mono text-amber-300">{currentUserEmail}</span>
             </div>
           )}
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Super Admin गुप्त पासवर्ड (Passcode)
+                Super Admin Secret Passcode
               </label>
               <input
                 type="password"
                 required
-                placeholder="पासवर्ड टाका (डिफॉल्ट: Admin@2026)"
+                placeholder="Enter passcode (Default: Admin@1234)"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500"
@@ -233,14 +317,14 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 type="submit"
                 className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 font-bold text-white text-xs shadow-lg transition-colors cursor-pointer"
               >
-                लॉग इन करा
+                Log In
               </button>
               <button
                 type="button"
                 onClick={onExit}
                 className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 font-semibold text-slate-300 text-xs transition-colors cursor-pointer"
               >
-                रद्द करा
+                Cancel
               </button>
             </div>
           </form>
@@ -280,7 +364,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                सदस्यत्व मंजुरी, कालावधी नियंत्रण व वापरकर्ता व्यवस्थापन
+                Subscription approvals, duration controls & user management
               </p>
             </div>
           </div>
@@ -292,7 +376,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 type="button"
                 onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
                 className="relative p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-                title="सूचना (Notifications)"
+                title="Notifications"
               >
                 <Bell className="w-4 h-4" />
                 {unreadNotifications.length > 0 && (
@@ -307,7 +391,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 text-slate-900 py-3 z-50 animate-in fade-in slide-in-from-top-2">
                   <div className="px-4 pb-2 border-b border-slate-100 flex items-center justify-between">
                     <span className="font-bold text-xs text-slate-800">
-                      सूचना ({notifications.length})
+                      Notifications ({notifications.length})
                     </span>
                     {unreadNotifications.length > 0 && (
                       <button
@@ -318,7 +402,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                         }}
                         className="text-[11px] text-amber-700 hover:underline cursor-pointer"
                       >
-                        सर्व वाचले असे चिन्हांकित करा
+                        Mark all as read
                       </button>
                     )}
                   </div>
@@ -326,7 +410,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs">
                     {notifications.length === 0 ? (
                       <div className="p-4 text-center text-slate-400">
-                        कोणतीही नवीन सूचना नाही
+                        No new notifications
                       </div>
                     ) : (
                       notifications.map((notif) => (
@@ -366,7 +450,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               onClick={onExit}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
             >
-              <span>अ‍ॅपवर परत जा (Exit to App)</span>
+              <span>Exit to App</span>
             </button>
 
             {/* Logout */}
@@ -374,7 +458,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               type="button"
               onClick={handleLogout}
               className="p-2 rounded-xl bg-slate-800 hover:bg-rose-900/50 text-slate-300 hover:text-rose-300 transition-colors cursor-pointer"
-              title="लॉग आऊट"
+              title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -385,10 +469,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
         {/* Metric Cards Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
           <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">एकूण विनंत्या</span>
+              <span className="text-xs font-semibold text-slate-500">Total Profiles</span>
               <Users className="w-4 h-4 text-slate-400" />
             </div>
             <p className="text-2xl font-extrabold text-slate-900 mt-2 font-mono">
@@ -398,7 +482,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
           <div className="bg-white rounded-2xl p-4 border border-amber-200 bg-amber-50/40 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-800">मंजुरी प्रलंबित</span>
+              <span className="text-xs font-semibold text-amber-800">Pending Approval</span>
               <Clock className="w-4 h-4 text-amber-600" />
             </div>
             <p className="text-2xl font-extrabold text-amber-900 mt-2 font-mono">
@@ -408,7 +492,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
           <div className="bg-white rounded-2xl p-4 border border-emerald-200 bg-emerald-50/40 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-800">सक्रिय सदस्यत्व</span>
+              <span className="text-xs font-semibold text-emerald-800">Active Subscriptions</span>
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             </div>
             <p className="text-2xl font-extrabold text-emerald-900 mt-2 font-mono">
@@ -416,21 +500,47 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('requests');
+              setStatusFilter('pending_deletion');
+            }}
+            className={`rounded-2xl p-4 border shadow-xs text-left cursor-pointer transition-all ${
+              pendingDeletions.length > 0
+                ? 'bg-rose-50/60 border-rose-300 hover:bg-rose-100/50'
+                : 'bg-white border-slate-200/80'
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">ईमेल नोटिफिकेशन्स</span>
+              <span className={`text-xs font-semibold ${pendingDeletions.length > 0 ? 'text-rose-800' : 'text-slate-500'}`}>
+                Data Retention (28 Days)
+              </span>
+              <Trash2 className={`w-4 h-4 ${pendingDeletions.length > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
+            </div>
+            <p className={`text-2xl font-extrabold mt-2 font-mono ${pendingDeletions.length > 0 ? 'text-rose-900' : 'text-slate-900'}`}>
+              {pendingDeletions.length}
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              {pendingDeletions.length > 0 ? '28-day retention period active' : 'None pending'}
+            </span>
+          </button>
+
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500">Email Alerts</span>
               <Mail className="w-4 h-4 text-slate-400" />
             </div>
             <div className="mt-2 flex items-center justify-between">
               <span className="text-xs font-mono font-bold text-emerald-700">
-                {config.emailAlertsEnabled ? 'चालू (Active)' : 'बंद'}
+                {config.emailAlertsEnabled ? 'Active' : 'Disabled'}
               </span>
               <button
                 type="button"
                 onClick={handleTestEmail}
                 className="text-[10px] text-amber-700 font-bold hover:underline cursor-pointer"
               >
-                चाचणी पाठवा
+                Send Test
               </button>
             </div>
           </div>
@@ -446,19 +556,43 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
         <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
           <button
             type="button"
-            onClick={() => setActiveTab('requests')}
+            onClick={() => {
+              setActiveTab('requests');
+              setStatusFilter('all');
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'requests'
+              activeTab === 'requests' && statusFilter !== 'pending_deletion'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
             }`}
           >
             <School className="w-4 h-4" />
-            <span>शाळा प्रवेश विनंत्या (School Requests)</span>
+            <span>School Profiles & Requests</span>
             <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 text-[10px] font-mono">
               {requests.length}
             </span>
           </button>
+
+          {pendingDeletions.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('requests');
+                setStatusFilter('pending_deletion');
+              }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'requests' && statusFilter === 'pending_deletion'
+                  ? 'bg-rose-700 text-white shadow-sm'
+                  : 'text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200'
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Data Retention (28 Days)</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-rose-900 text-rose-100 text-[10px] font-mono">
+                {pendingDeletions.length}
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -470,7 +604,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             }`}
           >
             <Gift className="w-4 h-4" />
-            <span>रेफरल्स व बक्षिसे (Referrals & Rewards)</span>
+            <span>Referrals & Rewards</span>
             <span className="px-1.5 py-0.5 rounded-full bg-amber-700 text-white text-[10px] font-mono">
               {referrals.length}
             </span>
@@ -479,226 +613,285 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
         {/* Requests Management Table Card */}
         {activeTab === 'requests' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Header & Controls */}
-          <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                शाळा प्रवेश विनंत्या व सदस्यत्व यादी
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                वापरकर्त्यांना मान्यता द्या आणि सदस्यत्व मुदत (Duration) निश्चित करा
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              {/* Search */}
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="शाळा, UDISE किंवा ईमेल शोधा..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
-                />
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Header & Controls */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  School Profiles & Subscription Management
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Approve access requests and manage subscription durations & 28-day data retention
+                </p>
               </div>
 
-              {/* Status Filter */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
-              >
-                <option value="all">सर्व स्थिती (All)</option>
-                <option value="pending">फक्त प्रलंबित (Pending)</option>
-                <option value="active">फक्त सक्रिय (Active)</option>
-                <option value="rejected">नामंजूर (Rejected)</option>
-              </select>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search school, UDISE, or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
 
-              <button
-                type="button"
-                onClick={loadData}
-                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
-                title="रिफ्रेश करा"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
+                {/* Status Filter */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
+                >
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending Only</option>
+                  <option value="active">Active Only</option>
+                  <option value="pending_deletion">Pending Deletion (28 Days)</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={loadData}
+                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                  <th className="py-3 px-4">शाळा व UDISE</th>
-                  <th className="py-3 px-4">मुख्याध्यापक / ईमेल</th>
-                  <th className="py-3 px-4">केंद्र व जिल्हा</th>
-                  <th className="py-3 px-4">स्थिती</th>
-                  <th className="py-3 px-4">मुदत (Expiry)</th>
-                  <th className="py-3 px-4 text-right">कृती (Action)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredRequests.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400">
-                      कोणतीही विनंती सापडली नाही.
-                    </td>
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <th className="py-3 px-4">School & UDISE</th>
+                    <th className="py-3 px-4">Headmaster / Email</th>
+                    <th className="py-3 px-4">Cluster & District</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Expiry / Retention</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
-                ) : (
-                  filteredRequests.map((req) => {
-                    const isPending = req.status === 'pending';
-                    const isActive = req.status === 'active';
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                        No requests or profiles found.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRequests.map((req) => {
+                      const isPending = req.status === 'pending';
+                      const isActive = req.status === 'active';
+                      const isPendingDeletion = req.status === 'pending_deletion';
+                      const daysLeft = req.expiresAt
+                        ? Math.ceil(
+                          (new Date(req.expiresAt).getTime() - new Date().getTime()) /
+                          (1000 * 60 * 60 * 24)
+                        )
+                        : 0;
+                      const daysUntilPermanentDeletion = req.permanentDeletionDate
+                        ? Math.max(
+                          0,
+                          Math.ceil(
+                            (new Date(req.permanentDeletionDate).getTime() - Date.now()) /
+                            (1000 * 60 * 60 * 24)
+                          )
+                        )
+                        : 28;
 
-                    // Compute days remaining
-                    let daysLeft = 0;
-                    if (req.expiresAt) {
-                      daysLeft = Math.ceil(
-                        (new Date(req.expiresAt).getTime() - Date.now()) / (1000 * 3600 * 24)
-                      );
-                    }
+                      return (
+                        <tr
+                          key={req.id}
+                          className={`hover:bg-slate-50/80 transition-colors ${isPendingDeletion ? 'bg-rose-50/30' : ''
+                            }`}
+                        >
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900">{req.schoolName}</div>
+                            <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
+                              <span>UDISE: {req.udiseNumber}</span>
+                              {req.referralCode && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold text-[9px]">
+                                  Ref: {req.referralCode}
+                                </span>
+                              )}
+                            </div>
+                            {req.agreedToTerms && (
+                              <div className="text-[10px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
+                                <span>✓ Terms Accepted ({req.termsVersion || 'v1.0'})</span>
+                              </div>
+                            )}
+                          </td>
 
-                    return (
-                      <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900">{req.schoolName}</div>
-                          <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
-                            <span>UDISE: {req.udiseNumber}</span>
-                            {req.referralCode && (
-                              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold text-[9px]">
-                                Ref: {req.referralCode}
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-slate-800">{req.userName || '-'}</div>
+                            <div className="text-[11px] text-slate-500">{req.userEmail}</div>
+                            {req.phone && (
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                Phone: {req.phone}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 text-slate-600">
+                            <div>{req.centerCluster || '-'}</div>
+                            <div className="text-[11px] text-slate-400">{req.district}</div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {isPending && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                <span>Pending</span>
                               </span>
                             )}
-                          </div>
-                          {req.agreedToTerms && (
-                            <div className="text-[10px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
-                              <span>✓ अटी मान्य ({req.termsVersion || 'v1.0'})</span>
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <div className="font-medium text-slate-800">{req.userName || '-'}</div>
-                          <div className="text-[11px] text-slate-500">{req.userEmail}</div>
-                          {req.phone && (
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              मो: {req.phone}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 text-slate-600">
-                          <div>{req.centerCluster || '-'}</div>
-                          <div className="text-[11px] text-slate-400">{req.district}</div>
-                        </td>
-
-                        <td className="py-3 px-4">
-                          {isPending && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                              <Clock className="w-3 h-3 text-amber-600" />
-                              प्रलंबित (Pending)
-                            </span>
-                          )}
-                          {isActive && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              सक्रिय (Active)
-                            </span>
-                          )}
-                          {req.status === 'rejected' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                              <XCircle className="w-3 h-3 text-rose-600" />
-                              नामंजूर
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          {isActive && req.expiresAt ? (
-                            <div>
-                              <div className="font-mono text-slate-800">
-                                {new Date(req.expiresAt).toLocaleDateString('mr-IN')}
-                              </div>
-                              <div
-                                className={`text-[10px] font-semibold ${
-                                  daysLeft > 30
-                                    ? 'text-emerald-700'
-                                    : daysLeft > 0
-                                    ? 'text-amber-700'
-                                    : 'text-rose-700'
-                                }`}
-                              >
-                                {daysLeft > 0 ? `${daysLeft} दिवस शिल्लक` : 'मुदत संपली'}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {isPending && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenApproveModal(req)}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-                              >
-                                मंजुरी द्या (Approve)
-                              </button>
-                            )}
-
                             {isActive && (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleExtend(req.id, 1)}
-                                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
-                                  title="१ महिना मुदत वाढवा"
-                                >
-                                  +1 महिना
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleExtend(req.id, 6)}
-                                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
-                                  title="६ महिने मुदत वाढवा"
-                                >
-                                  +6 महिने
-                                </button>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>Active</span>
+                              </span>
+                            )}
+                            {isPendingDeletion && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                <span>Pending Deletion (28 Days)</span>
+                              </span>
+                            )}
+                            {req.status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                                <XCircle className="w-3 h-3 text-slate-500" />
+                                <span>Rejected</span>
+                              </span>
+                            )}
+                            {req.status === 'expired' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                <span>Expired</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {isPendingDeletion ? (
+                              <div className="space-y-0.5">
+                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700 font-bold text-[10px]">
+                                  <Clock className="w-3 h-3 text-rose-600" />
+                                  <span>{daysUntilPermanentDeletion} days left</span>
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  28-Day Data Retention
+                                </div>
                               </div>
+                            ) : isActive && req.expiresAt ? (
+                              <div>
+                                <div className="font-mono text-slate-800">
+                                  {new Date(req.expiresAt).toLocaleDateString('en-IN')}
+                                </div>
+                                <div
+                                  className={`text-[10px] font-semibold ${daysLeft > 30
+                                      ? 'text-emerald-700'
+                                      : daysLeft > 0
+                                        ? 'text-amber-700'
+                                        : 'text-rose-700'
+                                    }`}
+                                >
+                                  {daysLeft > 0 ? `${daysLeft} days left` : 'Expired'}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">-</span>
                             )}
+                          </td>
 
-                            {isPending && (
-                              <button
-                                type="button"
-                                onClick={() => handleReject(req.id)}
-                                className="px-2 py-1.5 rounded-lg border border-slate-200 text-rose-600 hover:bg-rose-50 font-semibold text-xs cursor-pointer"
-                              >
-                                नामंजूर
-                              </button>
-                            )}
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                              {isPending && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenApproveModal(req)}
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReject(req.id)}
+                                    className="px-2 py-1.5 rounded-lg border border-slate-200 text-rose-600 hover:bg-rose-50 font-semibold text-xs cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(req.id)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 cursor-pointer"
-                              title="हटवा"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                              {isActive && (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExtend(req.id, 1)}
+                                    className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
+                                    title="Extend 1 Month"
+                                  >
+                                    +1 Month
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExtend(req.id, 6)}
+                                    className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
+                                    title="Extend 6 Months"
+                                  >
+                                    +6 Months
+                                  </button>
+                                </div>
+                              )}
+
+                              {isPendingDeletion && (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCancelDelete(req.id)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Cancel deletion and restore profile"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    <span>Restore</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenPurgeModal(req)}
+                                    className="px-2 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Purge immediately without waiting 28 days"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Purge Now</span>
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Delete Profile button (2-step confirmation) */}
+                              {!isPendingDeletion && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDeleteModal(req)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="Delete Profile (with 28-day retention period)"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         )}
 
         {/* Referrals & Rewards Management Tab Card */}
@@ -707,38 +900,38 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             {/* Referral Stats Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-                <span className="text-xs font-semibold text-slate-500">एकूण रेफरल्स</span>
+                <span className="text-xs font-semibold text-slate-500">Total Referrals</span>
                 <p className="text-2xl font-black text-slate-900 mt-1 font-mono">
                   {referrals.length}
                 </p>
-                <span className="text-[11px] text-slate-400">नोंदणी केलेल्या शाळा</span>
+                <span className="text-[11px] text-slate-400">Registered Schools</span>
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-emerald-200 bg-emerald-50/30 shadow-xs">
-                <span className="text-xs font-semibold text-emerald-800">मंजूर झालेल्या शाळा</span>
+                <span className="text-xs font-semibold text-emerald-800">Approved Schools</span>
                 <p className="text-2xl font-black text-emerald-700 mt-1 font-mono">
                   {referrals.filter((r) => r.registrationStatus === 'active').length}
                 </p>
-                <span className="text-[11px] text-emerald-600">सक्रिय सदस्यत्व सुरू</span>
+                <span className="text-[11px] text-emerald-600">Active Subscriptions</span>
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-amber-200 bg-amber-50/40 shadow-xs">
-                <span className="text-xs font-semibold text-amber-800">बक्षीस देण्यास पात्र</span>
+                <span className="text-xs font-semibold text-amber-800">Eligible for Reward</span>
                 <p className="text-2xl font-black text-amber-800 mt-1 font-mono">
                   ₹{referrals.filter((r) => r.rewardStatus === 'eligible').reduce((sum, r) => sum + r.rewardAmount, 0)}
                 </p>
                 <span className="text-[11px] text-amber-700">
-                  {referrals.filter((r) => r.rewardStatus === 'eligible').length} शाळा (वितरण बाकी)
+                  {referrals.filter((r) => r.rewardStatus === 'eligible').length} schools (payout pending)
                 </span>
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-                <span className="text-xs font-semibold text-slate-500">वितरित केलेले बक्षीस</span>
+                <span className="text-xs font-semibold text-slate-500">Paid Rewards</span>
                 <p className="text-2xl font-black text-emerald-600 mt-1 font-mono">
                   ₹{referrals.filter((r) => r.rewardStatus === 'paid').reduce((sum, r) => sum + r.rewardAmount, 0)}
                 </p>
                 <span className="text-[11px] text-slate-400">
-                  {referrals.filter((r) => r.rewardStatus === 'paid').length} शाळांना अदा केले
+                  Paid to {referrals.filter((r) => r.rewardStatus === 'paid').length} schools
                 </span>
               </div>
             </div>
@@ -749,10 +942,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 <div>
                   <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <Gift className="w-5 h-5 text-amber-600" />
-                    <span>रेफरल यादी व बक्षीस वितरण व्यवस्थापन</span>
+                    <span>Referral Directory & Reward Payout Management</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    शिक्षकांनी जोडलेल्या शाळा तपासा आणि थेट UPI द्वारे बक्षीस वितरण नोंदवा
+                    Track teacher-referred schools and record direct UPI reward payouts
                   </p>
                 </div>
 
@@ -762,7 +955,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  <span>रिफ्रेश</span>
+                  <span>Refresh</span>
                 </button>
               </div>
 
@@ -770,19 +963,19 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                      <th className="py-3 px-4">रेफर करणारा शिक्षक (Referrer)</th>
-                      <th className="py-3 px-4">बक्षीस मिळण्यासाठी UPI तपशील</th>
-                      <th className="py-3 px-4">जोडलेली नवीन शाळा (Referred School)</th>
-                      <th className="py-3 px-4">शाळा स्थिती</th>
-                      <th className="py-3 px-4">बक्षीस स्थिती</th>
-                      <th className="py-3 px-4 text-right">ॲक्शन (Action)</th>
+                      <th className="py-3 px-4">Referrer Teacher</th>
+                      <th className="py-3 px-4">Payout UPI Details</th>
+                      <th className="py-3 px-4">Referred School</th>
+                      <th className="py-3 px-4">School Status</th>
+                      <th className="py-3 px-4">Reward Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {referrals.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-8 text-center text-slate-400">
-                          सध्या कोणत्याही रेफरल नोंदी उपलब्ध नाहीत.
+                          No referral records available.
                         </td>
                       </tr>
                     ) : (
@@ -792,7 +985,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                             <div className="font-bold text-slate-900">{ref.referrerName}</div>
                             <div className="text-[11px] text-slate-500">{ref.referrerSchool}</div>
                             <div className="text-[10px] font-mono text-amber-800 font-semibold mt-0.5">
-                              कोड: {ref.referrerCode}
+                              Code: {ref.referrerCode}
                             </div>
                           </td>
 
@@ -806,22 +999,22 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                   type="button"
                                   onClick={() => {
                                     navigator.clipboard.writeText(ref.referrerUpiId || '');
-                                    alert(`UPI ID कॉपी झाला: ${ref.referrerUpiId}`);
+                                    alert(`UPI ID copied: ${ref.referrerUpiId}`);
                                   }}
                                   className="p-1 text-slate-400 hover:text-amber-700 cursor-pointer"
-                                  title="UPI ID कॉपी करा"
+                                  title="Copy UPI ID"
                                 >
                                   <Copy className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             ) : (
                               <span className="text-[11px] text-slate-400 italic">
-                                UPI नोंदवलेला नाही
+                                No UPI registered
                               </span>
                             )}
                             {ref.referrerPhone && (
                               <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                मो: {ref.referrerPhone}
+                                Phone: {ref.referrerPhone}
                               </div>
                             )}
                           </td>
@@ -832,7 +1025,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                               UDISE: {ref.referredUdise}
                             </div>
                             <div className="text-[10px] text-slate-400">
-                              नोंदणी: {new Date(ref.registeredAt).toLocaleDateString('mr-IN')}
+                              Registered: {new Date(ref.registeredAt).toLocaleDateString('en-IN')}
                             </div>
                           </td>
 
@@ -840,12 +1033,12 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                             {ref.registrationStatus === 'active' ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                <span>सक्रिय (Approved)</span>
+                                <span>Active</span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                 <Clock className="w-3 h-3 text-amber-600" />
-                                <span>प्रलंबित (Pending)</span>
+                                <span>Pending</span>
                               </span>
                             )}
                           </td>
@@ -855,7 +1048,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                               <div>
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                   <Check className="w-3 h-3 text-emerald-600" />
-                                  <span>₹{ref.rewardAmount} दिले (Paid)</span>
+                                  <span>₹{ref.rewardAmount} Paid</span>
                                 </span>
                                 {ref.rewardPaymentRef && (
                                   <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-xs">
@@ -866,11 +1059,11 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                             ) : ref.rewardStatus === 'eligible' ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
                                 <Clock className="w-3 h-3 text-amber-600" />
-                                <span>बक्षीस पात्र (₹{ref.rewardAmount})</span>
+                                <span>Reward Eligible (₹{ref.rewardAmount})</span>
                               </span>
                             ) : (
                               <span className="text-[11px] text-slate-400 font-medium">
-                                शाळा मंजुरी प्रलंबित
+                                School approval pending
                               </span>
                             )}
                           </td>
@@ -887,11 +1080,11 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                 className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 ml-auto"
                               >
                                 <Wallet className="w-3.5 h-3.5" />
-                                <span>बक्षीस द्या (Pay)</span>
+                                <span>Pay Reward</span>
                               </button>
                             ) : (
                               <span className="text-[11px] text-emerald-600 font-semibold">
-                                ✓ पूर्ण झाले
+                                ✓ Completed
                               </span>
                             )}
                           </td>
@@ -914,7 +1107,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               <div className="flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-amber-600" />
                 <h3 className="text-sm font-bold text-slate-900">
-                  रेफरल बक्षीस वितरण नोंदवा (Manual Reward Payout)
+                  Record Referral Reward Payout
                 </h3>
               </div>
               <button
@@ -928,13 +1121,13 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
             <div className="my-4 p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 space-y-2 text-slate-700">
               <div>
-                <span className="text-slate-500">रेफर करणारा:</span>{' '}
+                <span className="text-slate-500">Referrer:</span>{' '}
                 <span className="font-bold text-slate-900">
                   {selectedReferralForPayout.referrerName} ({selectedReferralForPayout.referrerSchool})
                 </span>
               </div>
               <div>
-                <span className="text-slate-500">जोडलेली शाळा:</span>{' '}
+                <span className="text-slate-500">Referred School:</span>{' '}
                 <span className="font-semibold text-slate-800">
                   {selectedReferralForPayout.referredSchoolName} ({selectedReferralForPayout.referredUdise})
                 </span>
@@ -943,7 +1136,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 <div>
                   <span className="text-slate-500 block text-[11px]">UPI ID:</span>
                   <span className="font-mono font-bold text-sm text-amber-950">
-                    {selectedReferralForPayout.referrerUpiId || 'UPI नोंदवलेला नाही'}
+                    {selectedReferralForPayout.referrerUpiId || 'No UPI registered'}
                   </span>
                 </div>
                 {selectedReferralForPayout.referrerUpiId && (
@@ -957,7 +1150,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                     className="px-2.5 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold text-[10px] cursor-pointer flex items-center gap-1"
                   >
                     {copiedUpi ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedUpi ? 'कॉपी झाले!' : 'Copy UPI'}</span>
+                    <span>{copiedUpi ? 'Copied!' : 'Copy UPI'}</span>
                   </button>
                 )}
               </div>
@@ -966,7 +1159,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="block font-semibold text-slate-800 mb-1">
-                  बक्षीस रक्कम (₹ Amount)
+                  Reward Amount (₹)
                 </label>
                 <input
                   type="number"
@@ -978,12 +1171,12 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-800 mb-1">
-                  UPI ट्रान्झॅक्शन संदर्भ / UTR क्रमांक <span className="text-rose-500">*</span>
+                  UPI Transaction Ref / UTR Number <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="उदा. UPI-UTR-49201948123 किंवा GPay Ref"
+                  placeholder="e.g. UPI-UTR-49201948123 or GPay Ref"
                   value={payoutPaymentRef}
                   onChange={(e) => setPayoutPaymentRef(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-mono bg-white"
@@ -996,24 +1189,24 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   disabled={!payoutPaymentRef.trim()}
                   onClick={() => {
                     if (!payoutPaymentRef.trim()) {
-                      alert('कृपया UPI ट्रान्झॅक्शन संदर्भ क्रमांक टाका.');
+                      alert('Please enter the UPI transaction reference number.');
                       return;
                     }
                     markRewardAsPaid(selectedReferralForPayout.id, payoutPaymentRef, payoutAmount);
                     setSelectedReferralForPayout(null);
                     loadData();
-                    alert(`₹${payoutAmount} चे बक्षीस जमा झाल्याची नोंद यशस्वी झाली!`);
+                    alert(`Reward payout of ₹${payoutAmount} recorded successfully!`);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
                 >
-                  बक्षीस दिल्याची नोंद करा (Confirm Paid)
+                  Confirm Reward Paid
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedReferralForPayout(null)}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
                 >
-                  रद्द करा
+                  Cancel
                 </button>
               </div>
             </div>
@@ -1029,7 +1222,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 <h3 className="text-sm font-bold text-slate-900">
-                  वापरकर्ता प्रवेश व मुदत मंजूर करा
+                  Approve User Access & Subscription Duration
                 </h3>
               </div>
               <button
@@ -1044,20 +1237,20 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             <div className="my-4 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-slate-700">
               <div className="font-bold text-slate-900">{selectedRequest.schoolName}</div>
               <div>UDISE: {selectedRequest.udiseNumber}</div>
-              <div>ईमेल: {selectedRequest.userEmail}</div>
+              <div>Email: {selectedRequest.userEmail}</div>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block font-semibold text-slate-800 mb-2">
-                  सदस्यत्व कालावधी निवडा (Duration)
+                  Select Subscription Duration
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: '१ महिना (1 Month)', months: 1 },
-                    { label: '३ महिने (3 Months)', months: 3 },
-                    { label: '६ महिने (6 Months)', months: 6 },
-                    { label: '१ वर्ष (12 Months)', months: 12 },
+                    { label: '1 Month', months: 1 },
+                    { label: '3 Months', months: 3 },
+                    { label: '6 Months', months: 6 },
+                    { label: '12 Months (1 Year)', months: 12 },
                   ].map((opt) => (
                     <button
                       key={opt.months}
@@ -1066,11 +1259,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                         setApprovalDurationMonths(opt.months);
                         setCustomExpiryDate('');
                       }}
-                      className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer ${
-                        approvalDurationMonths === opt.months && !customExpiryDate
+                      className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer ${approvalDurationMonths === opt.months && !customExpiryDate
                           ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20'
                           : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                      }`}
+                        }`}
                     >
                       {opt.label}
                     </button>
@@ -1080,7 +1272,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  किंवा सानुकूल समाप्ती तारीख (Custom Expiry Date)
+                  Or Custom Expiry Date
                 </label>
                 <input
                   type="date"
@@ -1096,14 +1288,307 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   onClick={handleConfirmApproval}
                   className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white text-xs shadow-md transition-colors cursor-pointer"
                 >
-                  मंजूर करा (Confirm Access)
+                  Confirm & Approve Access
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowApprovalModal(false)}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
                 >
-                  रद्द करा
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2-Step Password-Protected Account Deletion Modal */}
+      {deleteModalRequest && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-rose-200 text-xs">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
+                  <Trash2 className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Delete School Profile
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+                      {deleteStep === 1 ? 'Confirmation 1/2' : 'Confirmation 2/2'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {deleteStep === 1
+                      ? 'First Confirmation: Review 28-day data retention policy and consequences'
+                      : 'Second Confirmation: Enter Super Admin Passcode for final confirmation'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteModalRequest(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* School Profile Summary */}
+            <div className="my-3.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-slate-900">{deleteModalRequest.schoolName}</span>
+                <span className="font-mono text-xs text-slate-600 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
+                  UDISE: {deleteModalRequest.udiseNumber}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-600">
+                <span>Headmaster: {deleteModalRequest.userName || '-'}</span>
+                <span>Email: {deleteModalRequest.userEmail}</span>
+                <span>District: {deleteModalRequest.district}</span>
+              </div>
+            </div>
+
+            {/* STEP 1: First Ask & 28-Day Retention Explanation */}
+            {deleteStep === 1 && (
+              <div className="space-y-3.5">
+                {/* 1st Question Prompt */}
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-xs font-bold text-amber-900">
+                      First Confirmation:
+                    </strong>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      Are you sure you want to delete this profile?
+                    </p>
+                  </div>
+                </div>
+
+                {/* 28-Day Retention Policy Card */}
+                <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl text-rose-950 space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-rose-900">
+                    <ShieldCheck className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>28-Day Data Retention Guarantee:</span>
+                  </div>
+                  <ul className="list-disc pl-5 space-y-1 text-[11px] text-rose-900 leading-normal">
+                    <li>
+                      <strong>Data is not erased immediately:</strong> For <strong>28 days</strong> following deletion, all school registers, inward stock, and daily records remain safely archived.
+                    </li>
+                    <li>
+                      <strong>Login suspended immediately:</strong> The school/user will no longer be able to log in to the app.
+                    </li>
+                    <li>
+                      <strong>Restore anytime within 28 days:</strong> During this 28-day grace period, the Super Admin can click <strong>'Restore'</strong> at any time to re-activate the account and restore all access.
+                    </li>
+                    <li>
+                      <strong>Permanently Erased after 28 days:</strong> Only once the 28-day period expires will all records be <strong>permanently erased</strong> from cloud databases and storage.
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Reason for Deletion (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Subscription cancelled, duplicate account, school closed, etc."
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleProceedToStep2}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Proceed to Step 2: Final Confirmation</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalRequest(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: Second Ask, Checkbox & Password Verification */}
+            {deleteStep === 2 && (
+              <div className="space-y-3.5">
+                {/* 2nd Question Prompt */}
+                <div className="p-3 bg-rose-100 border border-rose-300 rounded-xl text-rose-950 flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-xs font-bold text-rose-900">
+                      Second & Final Confirmation:
+                    </strong>
+                    <p className="text-[11px] text-rose-800 mt-0.5">
+                      Do you really want to delete this profile and place it in the 28-day data retention period?
+                    </p>
+                  </div>
+                </div>
+
+                {deleteError && (
+                  <div className="p-2.5 bg-rose-100 border border-rose-300 rounded-xl text-rose-800 text-xs font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{deleteError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block font-semibold text-slate-800 mb-1">
+                    Enter Super Admin Passcode <span className="text-rose-600">*</span>:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showDeletePasscode ? 'text' : 'password'}
+                      placeholder="Super Admin Passcode (Admin@1234)..."
+                      value={deletePasscode}
+                      onChange={(e) => {
+                        setDeletePasscode(e.target.value);
+                        setDeleteError('');
+                      }}
+                      className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-300 font-mono text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeletePasscode(!showDeletePasscode)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showDeletePasscode ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <input
+                    type="checkbox"
+                    id="ack-delete"
+                    checked={deleteAcknowledged}
+                    onChange={(e) => setDeleteAcknowledged(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                  />
+                  <label htmlFor="ack-delete" className="text-[11px] text-slate-700 cursor-pointer leading-tight">
+                    Yes, I confirm that I want to delete <strong>{deleteModalRequest.schoolName}</strong> with a 28-day data retention period, during which data remains restorable.
+                  </label>
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmScheduleDeletion}
+                    disabled={!deletePasscode || !deleteAcknowledged}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Confirm & Delete Profile (Keep Data for 28 Days)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteStep(1)}
+                    className="px-3 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalRequest(null)}
+                    className="px-3 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Immediate Permanent Purge Modal (Bypasses 28-day waiting, Passcode Protected) */}
+      {purgeModalRequest && (
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-300 text-xs">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-200 text-rose-800">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+              <h3 className="text-sm font-bold text-slate-900">
+                Permanent Purge Account Now
+              </h3>
+            </div>
+
+            <div className="my-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-[11px] leading-relaxed">
+              <strong className="block mb-1 font-bold text-rose-800">
+                Caution: This action cannot be undone!
+              </strong>
+              All data for <strong>{purgeModalRequest.schoolName}</strong> (UDISE: {purgeModalRequest.udiseNumber}) will be <strong>immediately erased</strong> from the cloud database and storage. Enter Super Admin Passcode to purge permanently without waiting 28 days.
+            </div>
+
+            {purgeError && (
+              <div className="mb-3 p-2.5 bg-rose-100 border border-rose-300 rounded-xl text-rose-800 text-xs font-semibold">
+                {purgeError}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Enter Super Admin Passcode:
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPurgePasscode ? 'text' : 'password'}
+                    placeholder="Super Admin Password..."
+                    value={purgePasscode}
+                    onChange={(e) => {
+                      setPurgePasscode(e.target.value);
+                      setPurgeError('');
+                    }}
+                    className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-300 font-mono text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPurgePasscode(!showPurgePasscode)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showPurgePasscode ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmImmediatePurge}
+                  disabled={!purgePasscode}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
+                >
+                  Purge Permanently Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPurgeModalRequest(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  Cancel
                 </button>
               </div>
             </div>

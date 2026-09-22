@@ -190,7 +190,7 @@ export interface AppData {
   language: LanguageMode;
 }
 
-export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'rejected';
+export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'rejected' | 'pending_deletion';
 
 export interface UserAccessRequest {
   id: string;
@@ -208,6 +208,10 @@ export interface UserAccessRequest {
   expiresAt?: string; // ISO string
   durationMonths?: number;
   notes?: string;
+  // Soft deletion and 28-day retention fields
+  scheduledDeletionAt?: string; // ISO string
+  permanentDeletionDate?: string; // ISO string (scheduledDeletionAt + 28 days)
+  deletionReason?: string;
   // Legal Agreement Audit Trail
   agreedToTerms?: boolean;
   agreedAt?: string; // ISO string
@@ -265,7 +269,7 @@ export interface UserPayoutDetails {
 
 export interface AdminNotification {
   id: string;
-  type: 'new_request' | 'expiring_soon' | 'expired' | 'new_referral';
+  type: 'new_request' | 'expiring_soon' | 'expired' | 'new_referral' | 'request_rejected' | 'account_deleted';
   title: string;
   message: string;
   timestamp: string; // ISO string

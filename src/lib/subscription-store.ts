@@ -3,13 +3,14 @@ import {
   recordReferralRegistration,
   syncReferralStatusWithSubscription,
 } from './referral-store';
+import { purgeUserDataFromCloud } from './cloud-sync';
 
 const REQUESTS_STORAGE_KEY = 'pm_poshan_access_requests_v1';
 const NOTIFICATIONS_STORAGE_KEY = 'pm_poshan_admin_notifications_v1';
 const ADMIN_CONFIG_KEY = 'pm_poshan_super_admin_config_v1';
 
 export const DEFAULT_SUPER_ADMIN_EMAIL = 'umardesh@gmail.com';
-export const DEFAULT_SUPER_ADMIN_PASSCODE = 'Admin@2026';
+export const DEFAULT_SUPER_ADMIN_PASSCODE = 'Admin@1234';
 
 export interface SuperAdminConfig {
   passcode: string;
@@ -69,6 +70,37 @@ const SEED_NOTIFICATIONS: AdminNotification[] = [
   },
 ];
 
+/**
+ * Automatically purges any requests whose 28-day soft-deletion grace period has expired.
+ */
+function purgeExpiredDeletions(requests: UserAccessRequest[]): UserAccessRequest[] {
+  const now = Date.now();
+  let changed = false;
+  const retained: UserAccessRequest[] = [];
+
+  for (const r of requests) {
+    if (r.status === 'pending_deletion' && r.permanentDeletionDate) {
+      const deleteTime = new Date(r.permanentDeletionDate).getTime();
+      if (now >= deleteTime) {
+        // 28 days elapsed -> permanently purge from localStorage and Supabase Cloud
+        changed = true;
+        if (r.clerkUserId) {
+          purgeUserDataFromCloud(r.clerkUserId).catch((err) =>
+            console.warn('Failed purging cloud data for expired request:', err)
+          );
+        }
+        continue;
+      }
+    }
+    retained.push(r);
+  }
+
+  if (changed) {
+    saveRequests(retained);
+  }
+  return retained;
+}
+
 function loadRequests(): UserAccessRequest[] {
   try {
     const raw = localStorage.getItem(REQUESTS_STORAGE_KEY);
@@ -76,7 +108,8 @@ function loadRequests(): UserAccessRequest[] {
       localStorage.setItem(REQUESTS_STORAGE_KEY, JSON.stringify(SEED_REQUESTS));
       return SEED_REQUESTS;
     }
-    return JSON.parse(raw);
+    const parsed: UserAccessRequest[] = JSON.parse(raw);
+    return purgeExpiredDeletions(parsed);
   } catch (e) {
     console.error('Failed to load access requests from localStorage', e);
     return SEED_REQUESTS;
@@ -154,9 +187,22 @@ export function getAllAccessRequests(): UserAccessRequest[] {
   return loadRequests();
 }
 
+// Testing bypass list: allowed email accounts that automatically bypass admin approval
+export const TEST_BYPASS_APPROVAL_EMAILS: string[] = [
+  'umardesh@gmail.com',
+  'umardesh11@gmail.com',
+  'abuzar212ai@gmail.com',
+];
+
+export function isBypassApprovalEmail(userEmail?: string): boolean {
+  if (!userEmail) return false;
+  const normalized = userEmail.toLowerCase().trim();
+  return TEST_BYPASS_APPROVAL_EMAILS.some((e) => e.toLowerCase().trim() === normalized);
+}
+
 /**
  * Calculates current user's access status.
- * Automatically grants perpetual full access to the Super Admin email.
+ * Automatically grants perpetual full access to the Super Admin and test bypass emails.
  */
 export function getUserAccessStatus(
   clerkUserId?: string,
@@ -170,12 +216,13 @@ export function getUserAccessStatus(
   const adminConfig = getSuperAdminConfig();
   const normalizedEmail = (userEmail || '').toLowerCase().trim();
   const isSuperAdmin = normalizedEmail === adminConfig.adminEmail.toLowerCase().trim();
+  const isBypass = isBypassApprovalEmail(normalizedEmail);
 
-  if (isSuperAdmin) {
+  if (isSuperAdmin || isBypass) {
     return {
       status: 'active',
       daysRemaining: 9999,
-      isSuperAdmin: true,
+      isSuperAdmin,
     };
   }
 
@@ -247,10 +294,14 @@ export function submitAccessRequest(
       (data.userEmail && r.userEmail.toLowerCase().trim() === data.userEmail.toLowerCase().trim())
   );
 
+  const isBypass = isBypassApprovalEmail(data.userEmail);
   const newRequest: UserAccessRequest = {
     ...data,
     id: existingIndex >= 0 ? requests[existingIndex].id : 'req_' + Date.now(),
-    status: 'pending',
+    status: isBypass ? 'active' : 'pending',
+    approvedAt: isBypass ? new Date().toISOString() : undefined,
+    durationMonths: isBypass ? 12 : undefined,
+    expiresAt: isBypass ? new Date(Date.now() + 365 * 86400 * 1000).toISOString() : undefined,
     requestedAt: new Date().toISOString(),
   };
 
@@ -391,11 +442,102 @@ export function rejectOrRevokeAccess(
 }
 
 /**
- * Delete a user request
+ * Schedules an account for deletion with a 28-day grace period.
+ * Immediately revokes active access and records audit timestamps.
+ */
+export function scheduleAccountDeletion(
+  requestId: string,
+  reason?: string
+): UserAccessRequest | null {
+  const requests = loadRequests();
+  const reqIndex = requests.findIndex((r) => r.id === requestId);
+  if (reqIndex === -1) return null;
+
+  const now = new Date();
+  const permanentDeletionDate = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000).toISOString();
+
+  requests[reqIndex] = {
+    ...requests[reqIndex],
+    status: 'pending_deletion',
+    scheduledDeletionAt: now.toISOString(),
+    permanentDeletionDate,
+    deletionReason: reason || 'Super Admin द्वारे २८ दिवसांच्या मुदतीत खाते हटवण्यासाठी चिन्हांकित केले.',
+  };
+
+  saveRequests(requests);
+
+  // Sync with referral store
+  syncReferralStatusWithSubscription(requestId, 'rejected');
+
+  // Push notification for audit trail
+  const notifs = getAdminNotifications();
+  notifs.unshift({
+    id: `notif_del_${Date.now()}`,
+    type: 'request_rejected',
+    title: 'खाते हटवण्यासाठी शेड्यूल केले (२८ दिवस)',
+    message: `${requests[reqIndex].schoolName} (${requests[reqIndex].udiseNumber}) चे खाते २८ दिवसांत नष्ट करण्यासाठी चिन्हांकित केले.`,
+    timestamp: now.toISOString(),
+    read: false,
+    requestId,
+  });
+  saveAdminNotifications(notifs);
+
+  return requests[reqIndex];
+}
+
+/**
+ * Cancels a scheduled deletion and restores the account.
+ */
+export function cancelAccountDeletion(requestId: string): UserAccessRequest | null {
+  const requests = loadRequests();
+  const reqIndex = requests.findIndex((r) => r.id === requestId);
+  if (reqIndex === -1) return null;
+
+  const req = requests[reqIndex];
+  // Restore to active if it was previously approved and not yet expired, else pending
+  let restoredStatus: SubscriptionStatus = 'pending';
+  if (req.approvedAt && req.expiresAt) {
+    const isStillValid = new Date(req.expiresAt).getTime() > Date.now();
+    restoredStatus = isStillValid ? 'active' : 'expired';
+  }
+
+  requests[reqIndex] = {
+    ...req,
+    status: restoredStatus,
+    scheduledDeletionAt: undefined,
+    permanentDeletionDate: undefined,
+    deletionReason: undefined,
+  };
+
+  saveRequests(requests);
+
+  // Sync with referral store
+  syncReferralStatusWithSubscription(requestId, restoredStatus);
+
+  return requests[reqIndex];
+}
+
+/**
+ * Permanently purges a user request and wipes cloud data immediately.
+ */
+export function permanentPurgeAccount(requestId: string): void {
+  const requests = loadRequests();
+  const target = requests.find((r) => r.id === requestId);
+  const filtered = requests.filter((r) => r.id !== requestId);
+  saveRequests(filtered);
+
+  if (target?.clerkUserId) {
+    purgeUserDataFromCloud(target.clerkUserId).catch((err) =>
+      console.warn('Failed purging cloud data for purged account:', err)
+    );
+  }
+}
+
+/**
+ * Legacy delete function alias (now calls permanentPurgeAccount)
  */
 export function deleteAccessRequest(requestId: string): void {
-  const requests = loadRequests().filter((r) => r.id !== requestId);
-  saveRequests(requests);
+  permanentPurgeAccount(requestId);
 }
 
 import { sendSchoolRegistrationAlert } from './email-service';

@@ -32,6 +32,7 @@ import {
   Gift,
   ShieldCheck,
   FileText,
+  Trash2,
 } from 'lucide-react';
 
 interface AccessPendingViewProps {
@@ -203,7 +204,52 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
       <main className="max-w-3xl mx-auto px-4 py-8 flex-1 w-full flex flex-col justify-center">
         {/* Status Card */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
-          {status === 'expired' ? (
+          {status === 'pending_deletion' ? (
+            <div className="text-center">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center mb-4">
+                <Trash2 className="w-7 h-7 text-rose-700" />
+              </div>
+              <span className="inline-block px-3 py-1 rounded-full bg-rose-100 text-rose-900 font-semibold text-xs mb-2">
+                खाते हटवणे प्रलंबित (Scheduled for Deletion)
+              </span>
+              <h2 className="text-xl font-bold text-slate-900">
+                आपले खाते हटवण्यासाठी चिन्हांकित केले आहे
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-lg mx-auto leading-relaxed">
+                प्रशासकीय सूचनेनुसार हे खाते बंद करण्यात आले असून पुढील{' '}
+                <strong className="text-rose-700 font-bold">
+                  {initialRequest?.permanentDeletionDate
+                    ? Math.max(
+                        0,
+                        Math.ceil(
+                          (new Date(initialRequest.permanentDeletionDate).getTime() - Date.now()) /
+                            (1000 * 60 * 60 * 24)
+                        )
+                      )
+                    : 28}{' '}
+                  दिवसांत
+                </strong>{' '}
+                नोंदवहीतील सर्व डेटा (रजिस्टर, शाळा माहिती, साठा) क्लाउडवरून कायमचा नष्ट केला जाईल.
+              </p>
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 max-w-md mx-auto">
+                <p className="font-semibold">खाते पूर्ववत (Restore) करावयाचे असल्यास:</p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  कृपया मुदत संपण्यापूर्वी त्वरित Super Admin शी संपर्क साधा: <strong>umardesh@gmail.com</strong>
+                </p>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>स्थिती पुन्हा तपासा (Check Status)</span>
+                </button>
+              </div>
+            </div>
+          ) : status === 'expired' ? (
             <div className="text-center">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4">
                 <AlertTriangle className="w-7 h-7 text-amber-700" />
