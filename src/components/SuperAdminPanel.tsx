@@ -28,6 +28,7 @@ import {
   markRewardAsPaid,
 } from '../lib/referral-store';
 import { sendTestEmail, sendApprovalConfirmationEmail } from '../lib/email-service';
+import { checkSupabaseHealth } from '../lib/supabase-client';
 
 import {
   ShieldAlert,
@@ -59,6 +60,11 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
+  Settings,
+  Database,
+  Save,
+  Server,
+  Sliders,
 } from 'lucide-react';
 
 interface SuperAdminPanelProps {
@@ -121,6 +127,67 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const [showPurgePasscode, setShowPurgePasscode] = useState(false);
 
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+
+  // Basic Settings Form State
+  const [settingsPasscode, setSettingsPasscode] = useState(config.passcode);
+  const [showSettingsPasscode, setShowSettingsPasscode] = useState(false);
+  const [settingsAdminEmail, setSettingsAdminEmail] = useState(config.adminEmail);
+  const [settingsEmailAlerts, setSettingsEmailAlerts] = useState(config.emailAlertsEnabled);
+  const [settingsDefaultDuration, setSettingsDefaultDuration] = useState<number>(config.defaultDurationMonths || 6);
+  const [settingsReferralReward, setSettingsReferralReward] = useState<number>(config.referralRewardAmount || 100);
+  const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<string | null>(null);
+  const [dbHealth, setDbHealth] = useState<{ testing: boolean; ok?: boolean; latencyMs?: number; error?: string }>({ testing: false });
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+
+  useEffect(() => {
+    setSettingsPasscode(config.passcode);
+    setSettingsAdminEmail(config.adminEmail);
+    setSettingsEmailAlerts(config.emailAlertsEnabled);
+    setSettingsDefaultDuration(config.defaultDurationMonths || 6);
+    setSettingsReferralReward(config.referralRewardAmount || 100);
+  }, [config]);
+
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated = {
+      passcode: settingsPasscode.trim() || DEFAULT_SUPER_ADMIN_PASSCODE,
+      adminEmail: settingsAdminEmail.trim() || 'umardesh@gmail.com',
+      emailAlertsEnabled: settingsEmailAlerts,
+      defaultDurationMonths: settingsDefaultDuration,
+      referralRewardAmount: settingsReferralReward,
+    };
+    updateSuperAdminConfig(updated);
+    setConfig(getSuperAdminConfig());
+    setSettingsSaveSuccess('सेटिंग्ज यशस्वीरीत्या सेव्ह करण्यात आल्या आहेत!');
+    setTimeout(() => setSettingsSaveSuccess(null), 3500);
+  };
+
+  const handleTestDatabase = async () => {
+    setDbHealth({ testing: true });
+    try {
+      const res = await checkSupabaseHealth();
+      setDbHealth({ testing: false, ...res });
+    } catch (err: any) {
+      setDbHealth({ testing: false, ok: false, error: err?.message || 'Error checking database' });
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    setIsSendingTestEmail(true);
+    setEmailStatusMsg(null);
+    try {
+      const res = await sendTestEmail(settingsAdminEmail);
+      if (res.success) {
+        setEmailStatusMsg(`✓ Resend चाचणी ईमेल ${settingsAdminEmail} वर यशस्वी पाठवला (ID: ${res.id || 'ok'})`);
+      } else {
+        setEmailStatusMsg(`✕ ईमेल पाठवणे अयशस्वी: ${res.message}`);
+      }
+    } catch (err: any) {
+      setEmailStatusMsg(`✕ एरर: ${err?.message}`);
+    } finally {
+      setIsSendingTestEmail(false);
+    }
+  };
 
   const loadData = async () => {
     setRequests(getAllAccessRequests());
@@ -315,10 +382,9 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               <input
                 type="password"
                 required
-                placeholder="Enter passcode (Default: Admin@1234)"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500"
               />
               {authError && (
                 <p className="text-xs text-rose-400 mt-1.5 font-medium">{authError}</p>
@@ -433,9 +499,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                             markNotificationAsRead(notif.id);
                             loadData();
                           }}
-                          className={`p-3.5 hover:bg-slate-50 transition-colors cursor-pointer ${
-                            !notif.read ? 'bg-amber-50/50' : ''
-                          }`}
+                          className={`p-3.5 hover:bg-slate-50 transition-colors cursor-pointer ${!notif.read ? 'bg-amber-50/50' : ''
+                            }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <span className="font-semibold text-slate-900 text-xs">
@@ -519,11 +584,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               setActiveTab('requests');
               setStatusFilter('pending_deletion');
             }}
-            className={`rounded-2xl p-4 border shadow-xs text-left cursor-pointer transition-all ${
-              pendingDeletions.length > 0
+            className={`rounded-2xl p-4 border shadow-xs text-left cursor-pointer transition-all ${pendingDeletions.length > 0
                 ? 'bg-rose-50/60 border-rose-300 hover:bg-rose-100/50'
                 : 'bg-white border-slate-200/80'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
               <span className={`text-xs font-semibold ${pendingDeletions.length > 0 ? 'text-rose-800' : 'text-slate-500'}`}>
@@ -573,11 +637,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               setActiveTab('requests');
               setStatusFilter('all');
             }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'requests' && statusFilter !== 'pending_deletion'
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'requests' && statusFilter !== 'pending_deletion'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
+              }`}
           >
             <School className="w-4 h-4" />
             <span>School Profiles & Requests</span>
@@ -593,11 +656,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 setActiveTab('requests');
                 setStatusFilter('pending_deletion');
               }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'requests' && statusFilter === 'pending_deletion'
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'requests' && statusFilter === 'pending_deletion'
                   ? 'bg-rose-700 text-white shadow-sm'
                   : 'text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200'
-              }`}
+                }`}
             >
               <Trash2 className="w-4 h-4" />
               <span>Data Retention (28 Days)</span>
@@ -610,17 +672,28 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('referrals')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'referrals'
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'referrals'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
+              }`}
           >
             <Gift className="w-4 h-4" />
             <span>Referrals & Rewards</span>
             <span className="px-1.5 py-0.5 rounded-full bg-amber-700 text-white text-[10px] font-mono">
               {referrals.length}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'settings'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Settings</span>
           </button>
         </div>
 
@@ -806,10 +879,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                 </div>
                                 <div
                                   className={`text-[10px] font-semibold ${daysLeft > 30
-                                      ? 'text-emerald-700'
-                                      : daysLeft > 0
-                                        ? 'text-amber-700'
-                                        : 'text-rose-700'
+                                    ? 'text-emerald-700'
+                                    : daysLeft > 0
+                                      ? 'text-amber-700'
+                                      : 'text-rose-700'
                                     }`}
                                 >
                                   {daysLeft > 0 ? `${daysLeft} days left` : 'Expired'}
@@ -1228,6 +1301,279 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
         </div>
       )}
 
+      {/* Basic Settings Tab Card */}
+      {activeTab === 'settings' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 sm:p-6 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-amber-600" />
+                  <span>प्रशासकीय मूलभूत सेटिंग्ज (Super Admin Settings)</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  पासकोड सुरक्षा, ईमेल सूचना, सदस्यत्व मुदत आणि डेटाबेस आरोग्य व्यवस्थापित करा
+                </p>
+              </div>
+
+              {settingsSaveSuccess && (
+                <div className="px-3.5 py-1.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-semibold flex items-center gap-1.5 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>{settingsSaveSuccess}</span>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="p-4 sm:p-6 space-y-6">
+              {/* 1. Security & Passcode */}
+              <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200 text-slate-900 font-bold text-sm">
+                  <Lock className="w-4 h-4 text-amber-600" />
+                  <span>सुरक्षा आणि ॲक्सेस क्रेडेंशियल (Passcode & Security)</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Super Admin Passcode <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showSettingsPasscode ? 'text' : 'password'}
+                        required
+                        value={settingsPasscode}
+                        onChange={(e) => setSettingsPasscode(e.target.value)}
+                        className="w-full pl-3.5 pr-10 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSettingsPasscode(!showSettingsPasscode)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showSettingsPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      पॅनलमध्ये लॉगिन करण्यासाठी व खाते पूर्ण नष्ट (Purge) करण्यासाठी वापरला जातो.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Super Admin ईमेल पत्ता (Alerts Email)
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={settingsAdminEmail}
+                      onChange={(e) => setSettingsAdminEmail(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      नवीन शाळा नोंदणी आणि नूतनीकरण विनंत्या या ईमेलवर पाठवल्या जातात.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Email Notifications & Resend API */}
+              <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                    <Mail className="w-4 h-4 text-amber-600" />
+                    <span>ईमेल अलर्ट्स व Resend API (Notifications)</span>
+                  </div>
+
+                  <label className="inline-flex items-center cursor-pointer gap-2">
+                    <span className="text-xs font-semibold text-slate-700">
+                      {settingsEmailAlerts ? 'सक्रिय (Enabled)' : 'बंद (Disabled)'}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={settingsEmailAlerts}
+                      onChange={(e) => setSettingsEmailAlerts(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600 relative" />
+                  </label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+                  <div>
+                    <p className="font-semibold text-slate-800">स्वयंचलित नोंदणी ईमेल सूचना</p>
+                    <p className="text-slate-500 text-[11px]">
+                      शाळेने प्रवेश विनंती पाठवल्यास <strong>{settingsAdminEmail}</strong> ला तत्काळ सूचना प्राप्त होते.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isSendingTestEmail}
+                    onClick={handleSendTestEmail}
+                    className="px-3.5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-semibold text-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
+                  >
+                    {isSendingTestEmail ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>पाठवत आहे...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Resend चाचणी ईमेल पाठवा</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {emailStatusMsg && (
+                  <div className={`p-2.5 rounded-xl text-xs font-medium ${emailStatusMsg.startsWith('✓') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                    {emailStatusMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Subscription & Data Retention Defaults */}
+              <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200 text-slate-900 font-bold text-sm">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>सदस्यत्व व डेटा धारणा नियम (Subscription & Retention)</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      मंजुरीचा डीफॉल्ट कालावधी (Default Approval Duration)
+                    </label>
+                    <select
+                      value={settingsDefaultDuration}
+                      onChange={(e) => setSettingsDefaultDuration(Number(e.target.value))}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                    >
+                      <option value={3}>३ महिने (3 Months Trial)</option>
+                      <option value={6}>६ महिने (6 Months Standard)</option>
+                      <option value={12}>१२ महिने (1 Full Academic Year)</option>
+                      <option value={24}>२४ महिने (2 Academic Years)</option>
+                    </select>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      मंजुरी देताना डीफॉल्ट म्हणून निवडलेला कालावधी.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      रेफरल बक्षीस रक्कम प्रति शाळा (Referral Reward per School)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 font-bold text-slate-500">₹</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={10}
+                        value={settingsReferralReward}
+                        onChange={(e) => setSettingsReferralReward(Number(e.target.value))}
+                        className="w-full pl-8 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      रेफरल कोड वापरणाऱ्या शिक्षकाला खात्याच्या मंजुरीनंतर मिळणारे बक्षीस.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
+                  <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">२८ दिवसांचे डेटा धारणा संरक्षण (28-Day Grace Period)</p>
+                    <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
+                      खाते हटवल्यानंतर शासकीय नियमांनुसार शाळा डेटा २८ दिवसांसाठी राखून ठेवला जातो. या कालावधीत खाते पुन्हा सक्रिय करता येते. २८ दिवस पूर्ण झाल्यावर डेटाबेस व क्लाउडवरून डेटा आपोआप नष्ट होतो.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Cloud Database Health Diagnostics */}
+              <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                    <Database className="w-4 h-4 text-amber-600" />
+                    <span>क्लाउड डेटाबेस व सिंक आरोग्य (Cloud & Supabase Health)</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={dbHealth.testing}
+                    onClick={handleTestDatabase}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {dbHealth.testing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                        <span>तपासत आहे...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                        <span>कनेक्शन तपासा</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 bg-white rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block text-[11px]">Database Provider</span>
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5 mt-1">
+                      <Server className="w-3.5 h-3.5 text-amber-600" />
+                      Supabase PostgreSQL
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block text-[11px]">Connection Status</span>
+                    <span className="font-bold mt-1 inline-flex items-center gap-1.5">
+                      {dbHealth.testing ? (
+                        <span className="text-slate-400">Testing...</span>
+                      ) : dbHealth.ok === true ? (
+                        <span className="text-emerald-600 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Connected & Healthy
+                        </span>
+                      ) : dbHealth.ok === false ? (
+                        <span className="text-rose-600 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-rose-500" />
+                          Error: {dbHealth.error || 'Disconnected'}
+                        </span>
+                      ) : (
+                        <span className="text-slate-600">सक्रिय (Ready)</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-slate-200">
+                    <span className="text-slate-500 block text-[11px]">Query Latency</span>
+                    <span className="font-mono font-bold text-slate-800 mt-1 block">
+                      {dbHealth.latencyMs !== undefined ? `${dbHealth.latencyMs} ms` : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Changes Button */}
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-200">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>सेटिंग्ज सेव्ह करा (Save Settings)</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Approval Duration Modal */}
       {showApprovalModal && selectedRequest && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
@@ -1274,8 +1620,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                         setCustomExpiryDate('');
                       }}
                       className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer ${approvalDurationMonths === opt.months && !customExpiryDate
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20'
-                          : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                         }`}
                     >
                       {opt.label}
@@ -1468,7 +1814,6 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   <div className="relative">
                     <input
                       type={showDeletePasscode ? 'text' : 'password'}
-                      placeholder="Super Admin Passcode (Admin@1234)..."
                       value={deletePasscode}
                       onChange={(e) => {
                         setDeletePasscode(e.target.value);

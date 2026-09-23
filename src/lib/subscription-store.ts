@@ -22,12 +22,18 @@ export interface SuperAdminConfig {
   passcode: string;
   adminEmail: string;
   emailAlertsEnabled: boolean;
+  defaultDurationMonths?: number;
+  referralRewardAmount?: number;
+  systemNotice?: string;
 }
 
 const DEFAULT_CONFIG: SuperAdminConfig = {
   passcode: DEFAULT_SUPER_ADMIN_PASSCODE,
   adminEmail: DEFAULT_SUPER_ADMIN_EMAIL,
   emailAlertsEnabled: true,
+  defaultDurationMonths: 6,
+  referralRewardAmount: 100,
+  systemNotice: '',
 };
 
 // Clean default states - no demo requests or notifications
