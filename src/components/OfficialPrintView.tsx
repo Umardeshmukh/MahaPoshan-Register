@@ -2,17 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { AppData, DailyRegisterEntry } from '../types';
 import { getMonthNames, toMarathiDigits, formatINR } from '../lib/mdm-calculator';
 import { exportMonthlyRegisterToExcel } from '../lib/excel-export';
-import { exportReportToPDF } from '../lib/pdf-export';
 import { OFFICIAL_REGISTER_COLUMNS } from '../lib/constants';
 import {
   Printer,
   ArrowLeft,
-  Download,
   FileSpreadsheet,
-  FileText,
-  Loader2,
-  Calendar,
-  CheckCircle2,
 } from 'lucide-react';
 
 interface OfficialPrintViewProps {
@@ -28,8 +22,6 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
 }) => {
   const { profile, dailyEntries, stockInward } = appData;
   const [selectedMonth, setSelectedMonth] = useState<string>(initialMonthKey);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
-  const [pdfSuccess, setPdfSuccess] = useState<boolean>(false);
 
   const monthInfo = useMemo(() => getMonthNames(selectedMonth), [selectedMonth]);
   const inward = stockInward[selectedMonth] || {};
@@ -81,21 +73,6 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     return options;
   }, []);
 
-  const handleDownloadPdf = async () => {
-    setIsDownloadingPdf(true);
-    setPdfSuccess(false);
-    try {
-      const fileName = `PM_POSHAN_नोंदवही_भाग२_${selectedMonth}_${profile.udiseNumber || 'School'}.pdf`;
-      const success = await exportReportToPDF('official-register-document', fileName);
-      if (success) {
-        setPdfSuccess(true);
-        setTimeout(() => setPdfSuccess(false), 3500);
-      }
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  };
-
   const handleDownloadExcel = () => {
     exportMonthlyRegisterToExcel(selectedMonth, appData);
   };
@@ -145,33 +122,6 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               </select>
             </div>
 
-            {/* Direct PDF Download Button */}
-            <button
-              id="download-report-pdf-btn"
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={isDownloadingPdf}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
-              title="Download official report directly as PDF document"
-            >
-              {isDownloadingPdf ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>PDF तयार होत आहे...</span>
-                </>
-              ) : pdfSuccess ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>PDF डाऊनलोड झाले!</span>
-                </>
-              ) : (
-                <>
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>PDF डाऊनलोड (.pdf)</span>
-                </>
-              )}
-            </button>
-
             {/* Direct Excel (XLS) Download Button */}
             <button
               id="download-report-xls-btn"
@@ -184,7 +134,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               <span>Excel डाऊनलोड (.xlsx)</span>
             </button>
 
-            {/* Native Browser Print Button */}
+            {/* Native Browser Print Button (Save as PDF) */}
             <button
               id="browser-print-btn"
               type="button"
@@ -193,7 +143,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               title="Print on Physical Printer or Save as PDF"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>प्रिंट (Print A4)</span>
+              <span>प्रिंट काढा (Print / Save as PDF)</span>
             </button>
           </div>
         </div>

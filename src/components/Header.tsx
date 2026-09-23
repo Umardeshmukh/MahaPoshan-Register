@@ -141,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <FileText className="w-4 h-4 text-rose-600" />
-                <span>{language === 'en' ? 'Report (PDF)' : 'शासकीय अहवाल'}</span>
+                <span>{language === 'en' ? 'Report (Print)' : 'शासकीय अहवाल'}</span>
               </button>
 
               <button
@@ -313,7 +313,7 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <FileText className={`w-5 h-5 ${activeTab === 'print' ? 'text-rose-600' : 'text-slate-400'}`} />
           <span className="text-[10px] mt-0.5 tracking-tight">
-            {language === 'en' ? 'Report' : 'अहवाल (PDF)'}
+            {language === 'en' ? 'Report' : 'शासकीय अहवाल'}
           </span>
           {activeTab === 'print' && (
             <span className="w-1 h-1 rounded-full bg-rose-600 mt-0.5"></span>

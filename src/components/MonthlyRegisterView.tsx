@@ -16,6 +16,7 @@ import { exportMonthlyRegisterToExcel } from '../lib/excel-export';
 import {
   FileSpreadsheet,
   FileText,
+  Printer,
   Calendar,
   Layers,
   Save,
@@ -209,16 +210,16 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
             <span>Excel (.xlsx)</span>
           </button>
 
-          {/* PDF Report Export */}
+          {/* Official Report Print / PDF View */}
           <button
             id="open-official-report-btn"
             type="button"
             onClick={() => onOpenPrintView(selectedMonth)}
-            className="h-12 flex items-center justify-center gap-2 px-4 bg-rose-700 hover:bg-rose-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer active:scale-98"
-            title="Open Official Government Report Part-2 (PDF / Print)"
+            className="h-12 flex items-center justify-center gap-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer active:scale-98"
+            title="Open Official Government Report Part-2 (Print / Save as PDF)"
           >
-            <FileText className="w-4 h-4" />
-            <span>शासकीय अहवाल / PDF</span>
+            <Printer className="w-4 h-4" />
+            <span>शासकीय अहवाल (Print)</span>
           </button>
         </div>
       </div>
