@@ -10,7 +10,7 @@ const REFERRAL_RECORDS_KEY = 'pm_poshan_referral_records_v1';
 const USER_REFERRAL_PROFILES_KEY = 'pm_poshan_user_referral_profiles_v1';
 const USER_PAYOUT_DETAILS_KEY = 'pm_poshan_user_payout_details_v1';
 
-export const DEFAULT_REWARD_PER_SCHOOL = 100; // in ₹
+export const DEFAULT_REWARD_PER_SCHOOL = 0; // in ₹
 
 export interface UserReferralProfile {
   userId: string;

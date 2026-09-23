@@ -104,7 +104,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   // Payout Modal State
   const [selectedReferralForPayout, setSelectedReferralForPayout] = useState<ReferralRecord | null>(null);
   const [payoutPaymentRef, setPayoutPaymentRef] = useState('');
-  const [payoutAmount, setPayoutAmount] = useState<number>(100);
+  const [payoutAmount, setPayoutAmount] = useState<number>(0);
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState<string | null>(null);
   const [copiedUpi, setCopiedUpi] = useState(false);
 
@@ -134,7 +134,6 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const [settingsAdminEmail, setSettingsAdminEmail] = useState(config.adminEmail);
   const [settingsEmailAlerts, setSettingsEmailAlerts] = useState(config.emailAlertsEnabled);
   const [settingsDefaultDuration, setSettingsDefaultDuration] = useState<number>(config.defaultDurationMonths || 6);
-  const [settingsReferralReward, setSettingsReferralReward] = useState<number>(config.referralRewardAmount || 100);
   const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<string | null>(null);
   const [dbHealth, setDbHealth] = useState<{ testing: boolean; ok?: boolean; latencyMs?: number; error?: string }>({ testing: false });
   const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
@@ -144,7 +143,6 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     setSettingsAdminEmail(config.adminEmail);
     setSettingsEmailAlerts(config.emailAlertsEnabled);
     setSettingsDefaultDuration(config.defaultDurationMonths || 6);
-    setSettingsReferralReward(config.referralRewardAmount || 100);
   }, [config]);
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -154,7 +152,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
       adminEmail: settingsAdminEmail.trim() || 'umardesh@gmail.com',
       emailAlertsEnabled: settingsEmailAlerts,
       defaultDurationMonths: settingsDefaultDuration,
-      referralRewardAmount: settingsReferralReward,
+      referralRewardAmount: config.referralRewardAmount || 0,
     };
     updateSuperAdminConfig(updated);
     setConfig(getSuperAdminConfig());
@@ -1005,17 +1003,17 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               <div className="bg-white rounded-2xl p-4 border border-amber-200 bg-amber-50/40 shadow-xs">
                 <span className="text-xs font-semibold text-amber-800">Eligible for Reward</span>
                 <p className="text-2xl font-black text-amber-800 mt-1 font-mono">
-                  ₹{referrals.filter((r) => r.rewardStatus === 'eligible').reduce((sum, r) => sum + r.rewardAmount, 0)}
+                  {referrals.filter((r) => r.rewardStatus === 'eligible').length}
                 </p>
                 <span className="text-[11px] text-amber-700">
-                  {referrals.filter((r) => r.rewardStatus === 'eligible').length} schools (payout pending)
+                  Schools pending payout
                 </span>
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
                 <span className="text-xs font-semibold text-slate-500">Paid Rewards</span>
                 <p className="text-2xl font-black text-emerald-600 mt-1 font-mono">
-                  ₹{referrals.filter((r) => r.rewardStatus === 'paid').reduce((sum, r) => sum + r.rewardAmount, 0)}
+                  {referrals.filter((r) => r.rewardStatus === 'paid').length}
                 </p>
                 <span className="text-[11px] text-slate-400">
                   Paid to {referrals.filter((r) => r.rewardStatus === 'paid').length} schools
@@ -1135,7 +1133,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                               <div>
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                   <Check className="w-3 h-3 text-emerald-600" />
-                                  <span>₹{ref.rewardAmount} Paid</span>
+                                  <span>Paid</span>
                                 </span>
                                 {ref.rewardPaymentRef && (
                                   <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-xs">
@@ -1146,7 +1144,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                             ) : ref.rewardStatus === 'eligible' ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
                                 <Clock className="w-3 h-3 text-amber-600" />
-                                <span>Reward Eligible (₹{ref.rewardAmount})</span>
+                                <span>Reward Eligible</span>
                               </span>
                             ) : (
                               <span className="text-[11px] text-slate-400 font-medium">
@@ -1162,7 +1160,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                 onClick={() => {
                                   setSelectedReferralForPayout(ref);
                                   setPayoutPaymentRef('');
-                                  setPayoutAmount(ref.rewardAmount || 100);
+                                  setPayoutAmount(ref.rewardAmount || 0);
                                 }}
                                 className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 ml-auto"
                               >
@@ -1440,7 +1438,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   <span>सदस्यत्व व डेटा धारणा नियम (Subscription & Retention)</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                       मंजुरीचा डीफॉल्ट कालावधी (Default Approval Duration)
@@ -1457,26 +1455,6 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                     </select>
                     <p className="text-[11px] text-slate-400 mt-1">
                       मंजुरी देताना डीफॉल्ट म्हणून निवडलेला कालावधी.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                      रेफरल बक्षीस रक्कम प्रति शाळा (Referral Reward per School)
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-2.5 font-bold text-slate-500">₹</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        value={settingsReferralReward}
-                        onChange={(e) => setSettingsReferralReward(Number(e.target.value))}
-                        className="w-full pl-8 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500"
-                      />
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      रेफरल कोड वापरणाऱ्या शिक्षकाला खात्याच्या मंजुरीनंतर मिळणारे बक्षीस.
                     </p>
                   </div>
                 </div>

@@ -4,7 +4,6 @@ import {
   getReferralStats,
   getUserPayoutDetails,
   saveUserPayoutDetails,
-  DEFAULT_REWARD_PER_SCHOOL,
 } from '../lib/referral-store';
 import { ReferralStats, UserPayoutDetails } from '../types';
 import {
@@ -140,22 +139,22 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-semibold backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-            <span>रेफरल व बक्षीस योजना (Refer & Earn)</span>
+            <span>रेफरल योजना (Refer & Earn)</span>
           </div>
 
           <div className="text-right">
-            <span className="text-xs text-amber-200">प्रत्येक शाळेमागे बक्षीस:</span>
-            <span className="ml-1.5 text-base sm:text-lg font-black text-emerald-300 font-mono">
-              ₹{DEFAULT_REWARD_PER_SCHOOL} रोख
+            <span className="text-xs text-amber-200 font-semibold">प्रत्येक नोंदणीवर:</span>
+            <span className="ml-1.5 text-xs sm:text-sm font-bold text-emerald-300 bg-emerald-500/20 px-2.5 py-1 rounded-full border border-emerald-400/30">
+              विशेष बक्षीस
             </span>
           </div>
         </div>
 
         <h2 className="text-xl sm:text-2xl font-black text-white mt-3 leading-tight tracking-tight">
-          इतर शाळा जोडा आणि मिळवा रोख बक्षीस! 🎁
+          इतर शाळा जोडा आणि मिळवा विशेष बक्षीस! 🎁
         </h2>
         <p className="text-xs sm:text-sm text-amber-100/90 mt-1.5 max-w-xl leading-relaxed">
-          तुमच्या तालुक्यातील इतर मुख्याध्यापक व शिक्षकांना महापोषण रजिस्टर ॲप सुचवा. त्यांनी आपल्या रेफरल कोडद्वारे नोंदणी करून खाते सुरू केल्यास आपणास प्रत्येक शाळेमागे थेट रोख बक्षीस मिळेल!
+          तुमच्या तालुक्यातील इतर मुख्याध्यापक व शिक्षकांना महापोषण रजिस्टर ॲप सुचवा. त्यांनी आपल्या रेफरल कोडद्वारे नोंदणी करून खाते सुरू केल्यास आपणास प्रत्येक शाळेमागे थेट बक्षीस मिळेल!
         </p>
 
         {/* Unique Referral Code Box */}
@@ -234,17 +233,17 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
           <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10 text-center">
             <Clock className="w-4 h-4 mx-auto text-amber-400 mb-1" />
             <div className="text-xl font-bold font-mono text-amber-300">
-              ₹{stats?.rewardsPending || 0}
+              {stats?.pendingCount || 0}
             </div>
-            <div className="text-[11px] text-amber-200">प्रलंबित बक्षीस</div>
+            <div className="text-[11px] text-amber-200">प्रलंबित शाळा</div>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10 text-center">
             <Wallet className="w-4 h-4 mx-auto text-emerald-300 mb-1" />
             <div className="text-xl font-bold font-mono text-emerald-300">
-              ₹{stats?.rewardsPaid || 0}
+              {stats?.referrals.filter((r) => r.rewardStatus === 'paid').length || 0}
             </div>
-            <div className="text-[11px] text-amber-200">जमा झालेले बक्षीस</div>
+            <div className="text-[11px] text-amber-200">बक्षीस प्राप्त शाळा</div>
           </div>
         </div>
 
@@ -314,12 +313,12 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
                     {ref.rewardStatus === 'paid' ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-semibold border border-emerald-500/30">
                         <CheckCheck className="w-3 h-3" />
-                        <span>₹{ref.rewardAmount} दिले</span>
+                        <span>बक्षीस जमा</span>
                       </span>
                     ) : ref.rewardStatus === 'eligible' ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 text-[10px] font-semibold border border-amber-400/30">
                         <Clock className="w-3 h-3" />
-                        <span>बक्षीस पात्र (₹{ref.rewardAmount})</span>
+                        <span>बक्षीस पात्र</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-500/20 text-slate-300 text-[10px] font-semibold border border-slate-500/30">

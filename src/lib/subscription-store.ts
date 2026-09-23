@@ -32,7 +32,7 @@ const DEFAULT_CONFIG: SuperAdminConfig = {
   adminEmail: DEFAULT_SUPER_ADMIN_EMAIL,
   emailAlertsEnabled: true,
   defaultDurationMonths: 6,
-  referralRewardAmount: 100,
+  referralRewardAmount: 0,
   systemNotice: '',
 };
 
