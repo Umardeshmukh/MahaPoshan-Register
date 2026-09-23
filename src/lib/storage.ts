@@ -174,13 +174,35 @@ export function getInitialData(): AppData {
           return createEmptyCleanAppData();
         }
 
-        // Merge any newly introduced official ingredients if missing
+        // Merge and update ingredients to conform to official matrix norms
         if (parsed.ingredients) {
-          const existingIds = new Set(parsed.ingredients.map((i: Ingredient) => i.id));
-          const missing = DEFAULT_INGREDIENTS.filter((i) => !existingIds.has(i.id));
-          if (missing.length > 0) {
-            parsed.ingredients = [...parsed.ingredients, ...missing];
-          }
+          parsed.ingredients = DEFAULT_INGREDIENTS.map((def) => {
+            const existing = parsed.ingredients?.find((i: Ingredient) => i.id === def.id);
+            return {
+              ...def,
+              defaultGrams: def.defaultGrams,
+              unit: def.unit,
+              ratePerKg: 0,
+              ...(existing ? { nameMr: existing.nameMr || def.nameMr } : {}),
+            };
+          });
+        } else {
+          parsed.ingredients = DEFAULT_INGREDIENTS;
+        }
+
+        // Also update recipes to match updated matrix (e.g. soya_vadi: 20g)
+        if (parsed.recipes) {
+          parsed.recipes = parsed.recipes.map((r: DishRecipe) => {
+            const defRecipe = DEFAULT_RECIPES.find((d) => d.id === r.id);
+            if (defRecipe) {
+              return {
+                ...r,
+                pulseGrams: defRecipe.pulseGrams,
+                riceGrams: defRecipe.riceGrams,
+              };
+            }
+            return r;
+          });
         }
         return syncAppDataConfig(parsed);
       }

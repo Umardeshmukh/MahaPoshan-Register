@@ -247,7 +247,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs">
           <span className="text-xs text-slate-500 block font-medium">
-            डाळ/धान्य वापर
+            डाळ व कडधान्य वापर
           </span>
           <div className="text-2xl font-black text-slate-900 mt-1 font-mono">
             {summary.totalGrainsPulsesKg.toFixed(2)}{' '}
@@ -267,10 +267,11 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs col-span-2 sm:col-span-1">
           <span className="text-xs text-slate-500 block font-medium">
-            एकूण पाककला खर्च
+            नोंदणीकृत साहित्य
           </span>
           <div className="text-2xl font-black text-amber-900 mt-1 font-mono">
-            {formatINR(summary.totalCookingCost)}
+            {ingredients.length}{' '}
+            <span className="text-xs font-normal text-slate-500">प्रकार</span>
           </div>
         </div>
       </div>
@@ -489,10 +490,10 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                     <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <div className="text-right">
                         <span className="text-xs text-slate-400 block font-sans">
-                          पाककला खर्च
+                          एकूण धान्य
                         </span>
                         <span className="text-base sm:text-lg font-black text-amber-900 font-mono">
-                          {formatINR(entry.totalCookingCost)}
+                          {entry.totalGrainsPulsesKg.toFixed(3)} kg
                         </span>
                       </div>
 
@@ -584,8 +585,8 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                     <span className="font-bold text-slate-900 text-sm">
                       {ing.nameMr}
                     </span>
-                    <span className="text-xs text-slate-500 font-mono">
-                      दर: ₹{ing.ratePerKg}/kg
+                    <span className="text-xs text-slate-600 font-mono font-semibold bg-slate-100 px-2 py-0.5 rounded">
+                      {ing.defaultGrams} {ing.unit === 'nag' ? 'नग' : ing.unit === 'ml' ? 'ml' : 'g'}/वि.
                     </span>
                   </div>
 
@@ -655,9 +656,9 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
               <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                 <tr>
                   <th className="py-3 px-4">साहित्य नाव</th>
-                  <th className="py-3 px-4 text-right">दर (₹/kg)</th>
-                  <th className="py-3 px-4 text-right bg-blue-50/40">मागील शिल्लक (Opening kg)</th>
-                  <th className="py-3 px-4 text-right bg-emerald-50/40">प्राप्त साहित्य (Received kg)</th>
+                  <th className="py-3 px-4 text-center">एकक (Unit)</th>
+                  <th className="py-3 px-4 text-right bg-blue-50/40">मागील शिल्लक (Opening)</th>
+                  <th className="py-3 px-4 text-right bg-emerald-50/40">प्राप्त साहित्य (Received)</th>
                   <th className="py-3 px-4 text-right bg-slate-50 font-bold">एकूण उपलब्ध (kg)</th>
                   <th className="py-3 px-4 text-right text-amber-900">मासिक खर्च (Consumed kg)</th>
                   <th className="py-3 px-4 text-right font-bold text-slate-900 bg-amber-50/50">अखेर शिल्लक (Closing kg)</th>
@@ -691,8 +692,10 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                       <td className="py-2.5 px-4 font-sans font-semibold text-slate-900">
                         {ing.nameMr}
                       </td>
-                      <td className="py-2.5 px-4 text-right text-slate-500">
-                        ₹{ing.ratePerKg}
+                      <td className="py-2.5 px-4 text-center font-mono">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-bold">
+                          {ing.unit === 'nag' ? 'नग' : ing.unit === 'ml' ? 'लिटर' : 'किलो (kg)'}
+                        </span>
                       </td>
                       <td className="py-2.5 px-4 text-right bg-blue-50/20">
                         {stockEditMode ? (

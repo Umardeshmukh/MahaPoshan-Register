@@ -1675,13 +1675,13 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                             <input
                               type="number"
                               min="0"
-                              max="200"
-                              step="0.5"
+                              max="500"
+                              step="0.01"
                               value={ing.defaultGrams}
                               onChange={(e) =>
                                 handleGramsChange(ing.id, parseFloat(e.target.value))
                               }
-                              className="w-12 font-mono font-bold text-slate-900 text-center bg-transparent focus:outline-none"
+                              className="w-16 font-mono font-bold text-slate-900 text-center bg-transparent focus:outline-none"
                             />
                             <span className="text-[10px] text-slate-500 ml-1">
                               {ing.unit}

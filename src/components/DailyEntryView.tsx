@@ -497,7 +497,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                   <h3 className="font-bold text-base sm:text-lg text-white">
                     {language === 'en'
                       ? 'Live Consumption & Cost'
-                      : 'थेट लागणारा माल व पाककला खर्च'}
+                      : 'दैनिक लागणारा एकूण शिधा व साहित्य मोजदाद'}
                   </h3>
                 </div>
                 <span className="text-xs bg-slate-800 text-amber-300 font-mono px-3 py-1 rounded-lg border border-slate-700">
@@ -505,7 +505,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                 </span>
               </div>
 
-              {/* 3 Prominent KPI Cards */}
+              {/* 3 Prominent Physical Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* 1. Pulses / Grains */}
                 <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4">
@@ -535,22 +535,23 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                     <span className="text-xs font-bold text-emerald-400">kg</span>
                   </div>
                   <span className="text-[10px] text-slate-400 block mt-1">
-                    भाजीपाला (५०g) + वाटाणा
+                    भाजीपाला (५०g) + वाटाणा (२०g)
                   </span>
                 </div>
 
-                {/* 3. Total Cooking Cost */}
-                <div className="bg-amber-950/80 border border-amber-700/60 rounded-2xl p-4">
+                {/* 3. Beneficiaries & Physical Items Count */}
+                <div className="bg-slate-800/90 border border-amber-500/40 rounded-2xl p-4">
                   <span className="text-[11px] text-amber-300 block font-medium">
-                    एकूण पाककला खर्च
+                    एकूण लाभार्थी विद्यार्थी
                   </span>
                   <div className="flex items-baseline gap-1 mt-1">
                     <span className="text-2xl sm:text-3xl font-black text-amber-300 font-mono">
-                      {formatINR(calculation.totalCookingCost)}
+                      {studentCount}
                     </span>
+                    <span className="text-xs font-bold text-slate-300 ml-1">विद्यार्थी</span>
                   </div>
                   <span className="text-[10px] text-amber-200/80 block mt-1">
-                    {studentCount} विद्यार्थ्यांसाठी
+                    {calculation.items.length} साहित्याचे भौतिक प्रमाण
                   </span>
                 </div>
               </div>
@@ -656,7 +657,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Toggle Detailed Rates */}
+                  {/* Toggle Detailed Ingredients */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                     <button
                       type="button"
@@ -666,8 +667,8 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       <Layers className="w-4 h-4 text-amber-700" />
                       <span>
                         {showDetailedRates
-                          ? 'तपशीलवार साहित्य व दर तक्ता लपवा'
-                          : 'सविस्तर दर व साहित्य विवरण तक्ता पहा'}
+                          ? 'तपशीलवार साहित्य प्रमाण तक्ता लपवा'
+                          : 'सर्व साहित्याचे सविस्तर प्रमाण तक्ता पहा'}
                       </span>
                       {showDetailedRates ? (
                         <ChevronUp className="w-4 h-4 text-slate-400" />
@@ -677,7 +678,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                     </button>
 
                     <span className="text-[11px] text-slate-400 hidden sm:inline font-medium">
-                      दर बदलण्यासाठी 'सेटिंग्ज' वापरा
+                      प्रमाणानुसार स्वयंचलित मोजणी
                     </span>
                   </div>
 
@@ -696,15 +697,17 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                                 {item.nameMr}
                               </span>
                               <span className="text-[11px] text-slate-500 font-mono">
-                                {item.totalKg.toFixed(3)} kg ({item.gramsPerStudent}g/वि.)
+                                प्रति वि.: {item.gramsPerStudent} {item.ingredientId === 'purak_aahar' ? 'नग' : item.ingredientId === 'oil' ? 'ml' : 'g'}
                               </span>
                             </div>
                             <div className="text-right shrink-0">
-                              <span className="font-bold text-amber-900 block font-mono text-sm">
-                                ₹{item.cost.toFixed(2)}
+                              <span className="font-bold text-amber-950 block font-mono text-sm">
+                                {item.ingredientId === 'purak_aahar'
+                                  ? `${item.totalGrams} नग`
+                                  : `${item.totalKg.toFixed(3)} kg`}
                               </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                @ ₹{item.ratePerKg}/kg
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                ({item.totalGrams.toLocaleString('en-IN')} {item.ingredientId === 'oil' ? 'ml' : 'g'})
                               </span>
                             </div>
                           </div>
@@ -717,12 +720,11 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                           <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
                             <tr>
                               <th className="py-3 px-4">साहित्य नाव</th>
-                              <th className="py-3 px-4 text-right">प्रति वि.</th>
-                              <th className="py-3 px-4 text-right">एकूण ग्रॅम</th>
-                              <th className="py-3 px-4 text-right bg-amber-50/50">एकूण कि.ग्रॅ.</th>
-                              <th className="py-3 px-4 text-right">दर/kg</th>
-                              <th className="py-3 px-4 text-right font-bold text-amber-900">
-                                खर्च (₹)
+                              <th className="py-3 px-4">प्रवर्ग</th>
+                              <th className="py-3 px-4 text-right">प्रति विद्यार्थी प्रमाण</th>
+                              <th className="py-3 px-4 text-right">एकूण ग्रॅम / ml</th>
+                              <th className="py-3 px-4 text-right font-bold text-amber-950 bg-amber-50/70">
+                                एकूण आवश्यक प्रमाण (kg / नग)
                               </th>
                             </tr>
                           </thead>
@@ -735,20 +737,19 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                                 <td className="py-2.5 px-4 font-sans font-semibold text-slate-900">
                                   {item.nameMr}
                                 </td>
+                                <td className="py-2.5 px-4 font-sans text-slate-500 text-[11px]">
+                                  {item.category}
+                                </td>
                                 <td className="py-2.5 px-4 text-right">
-                                  {item.gramsPerStudent} g
+                                  {item.gramsPerStudent} {item.ingredientId === 'purak_aahar' ? 'नग' : item.ingredientId === 'oil' ? 'ml' : 'g'}
                                 </td>
                                 <td className="py-2.5 px-4 text-right font-semibold">
-                                  {item.totalGrams.toLocaleString('en-IN')} g
+                                  {item.totalGrams.toLocaleString('en-IN')} {item.ingredientId === 'oil' ? 'ml' : 'g'}
                                 </td>
                                 <td className="py-2.5 px-4 text-right font-bold text-amber-950 bg-amber-50/50">
-                                  {item.totalKg.toFixed(3)} kg
-                                </td>
-                                <td className="py-2.5 px-4 text-right text-slate-500">
-                                  ₹{item.ratePerKg}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-bold text-slate-900">
-                                  ₹{item.cost.toFixed(2)}
+                                  {item.ingredientId === 'purak_aahar'
+                                    ? `${item.totalGrams} नग`
+                                    : `${item.totalKg.toFixed(3)} kg`}
                                 </td>
                               </tr>
                             ))}
@@ -814,7 +815,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                             <span>
                               {item.dishNameMr} • <strong>{item.studentCount}</strong> वि. •{' '}
                               <span className="text-amber-800 font-bold">
-                                {formatINR(item.totalCookingCost)}
+                                {item.totalGrainsPulsesKg.toFixed(3)} kg धान्य
                               </span>
                             </span>
                           )}

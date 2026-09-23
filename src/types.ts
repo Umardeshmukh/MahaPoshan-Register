@@ -28,7 +28,7 @@ export interface Ingredient {
   category: IngredientCategory;
   defaultGrams: number;
   ratePerKg: number; // in ₹
-  unit: 'gm' | 'ml';
+  unit: 'gm' | 'ml' | 'nag';
   isFixedDaily: boolean; // whether it applies to all meals daily
 }
 
