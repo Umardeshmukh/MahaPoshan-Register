@@ -643,7 +643,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             }`}
           >
             <DollarSign className="w-4 h-4 text-amber-700" />
-            <span>दर व स्टेट्स (Rates)</span>
+            <span>साहित्य प्रमाण (Matrix)</span>
           </button>
 
           <button
@@ -1479,10 +1479,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </div>
                 <h3 className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2 mt-1">
                   <DollarSign className="w-5 h-5 text-amber-600" />
-                  <span>साहित्य दर निश्चिती व पाककला खर्च व्यवस्थापन (Item Rates & State Norms)</span>
+                  <span>साहित्य प्रमाण व पाककला खर्च व्यवस्थापन (Ingredient Matrix & Cooking Norm)</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  येथे निश्चित केलेल्या बाजारभाव दरांनुसार दैनिक हिशोब, मासिक नोंदवही व शासकीय भाग-२ अहवालाचा पाककला खर्च स्वयंचलित मोजला जातो.
+                  येथे निश्चित केलेल्या एका विद्यार्थ्याच्या मॅट्रिक्सनुसार (उदा. डाळी २०g, जिरे ०.१०g, तेल ५ml) एकूण शिधा मोजला जातो व पाककला खर्च प्रति विद्यार्थी स्थिर ₹२.३६ प्रमाणे मोजला जातो.
                 </p>
               </div>
 

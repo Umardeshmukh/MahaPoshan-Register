@@ -267,11 +267,10 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs col-span-2 sm:col-span-1">
           <span className="text-xs text-slate-500 block font-medium">
-            नोंदणीकृत साहित्य
+            एकूण पाककला खर्च (@ ₹२.३६)
           </span>
           <div className="text-2xl font-black text-amber-900 mt-1 font-mono">
-            {ingredients.length}{' '}
-            <span className="text-xs font-normal text-slate-500">प्रकार</span>
+            {formatINR(summary.totalCost)}
           </div>
         </div>
       </div>
@@ -490,10 +489,10 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                     <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <div className="text-right">
                         <span className="text-xs text-slate-400 block font-sans">
-                          एकूण धान्य
+                          खर्च (@ ₹२.३६)
                         </span>
                         <span className="text-base sm:text-lg font-black text-amber-900 font-mono">
-                          {entry.totalGrainsPulsesKg.toFixed(3)} kg
+                          {formatINR(entry.totalCookingCost)}
                         </span>
                       </div>
 
@@ -779,7 +778,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                       <div className="text-[10px] font-normal text-slate-500">[{unitMode}]</div>
                     </th>
                   ))}
-                  <th className="py-3 px-3 text-right bg-amber-100/50 text-amber-950 font-bold min-w-[90px]">दैनिक खर्च (₹)</th>
+                  <th className="py-3 px-3 text-right bg-amber-100/50 text-amber-950 font-bold min-w-[100px]">दैनिक खर्च (@ ₹२.३६)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-mono">

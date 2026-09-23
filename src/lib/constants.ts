@@ -1,5 +1,7 @@
 import { Ingredient, DishRecipe, SchoolProfile } from '../types';
 
+export const CONSTANT_COOKING_COST_PER_STUDENT = 2.36; // Constant rate of ₹2.36 per student
+
 export const DEFAULT_SCHOOL_PROFILE: SchoolProfile = {
   schoolName: '',
   udiseNumber: '',

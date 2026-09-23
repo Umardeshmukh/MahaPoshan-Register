@@ -539,19 +539,18 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                   </span>
                 </div>
 
-                {/* 3. Beneficiaries & Physical Items Count */}
-                <div className="bg-slate-800/90 border border-amber-500/40 rounded-2xl p-4">
+                {/* 3. Constant Cooking Cost (@ ₹2.36/student) */}
+                <div className="bg-amber-950/80 border border-amber-700/60 rounded-2xl p-4">
                   <span className="text-[11px] text-amber-300 block font-medium">
-                    एकूण लाभार्थी विद्यार्थी
+                    एकूण पाककला खर्च (@ ₹२.३६/वि.)
                   </span>
                   <div className="flex items-baseline gap-1 mt-1">
                     <span className="text-2xl sm:text-3xl font-black text-amber-300 font-mono">
-                      {studentCount}
+                      {formatINR(calculation.totalCookingCost)}
                     </span>
-                    <span className="text-xs font-bold text-slate-300 ml-1">विद्यार्थी</span>
                   </div>
                   <span className="text-[10px] text-amber-200/80 block mt-1">
-                    {calculation.items.length} साहित्याचे भौतिक प्रमाण
+                    {studentCount} विद्यार्थी × ₹२.३६ (निश्चित दर)
                   </span>
                 </div>
               </div>
@@ -813,9 +812,9 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                             <span>{item.holidayReason || 'सुट्टी'}</span>
                           ) : (
                             <span>
-                              {item.dishNameMr} • <strong>{item.studentCount}</strong> वि. •{' '}
+                              {item.dishNameMr} • <strong>{item.studentCount}</strong> वि. • {item.totalGrainsPulsesKg.toFixed(3)} kg •{' '}
                               <span className="text-amber-800 font-bold">
-                                {item.totalGrainsPulsesKg.toFixed(3)} kg धान्य
+                                {formatINR(item.totalCookingCost)} (@ ₹२.३६)
                               </span>
                             </span>
                           )}

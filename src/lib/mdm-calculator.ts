@@ -7,10 +7,17 @@ import {
   MonthlyStockInward,
   MonthSummary,
 } from '../types';
-import { MARATHI_DAYS, ENGLISH_DAYS, MARATHI_MONTHS, ENGLISH_MONTHS } from './constants';
+import {
+  MARATHI_DAYS,
+  ENGLISH_DAYS,
+  MARATHI_MONTHS,
+  ENGLISH_MONTHS,
+  CONSTANT_COOKING_COST_PER_STUDENT,
+} from './constants';
 
 /**
- * Pure calculation function for daily consumption based on student count, chosen dish recipe, and ingredient rates.
+ * Pure calculation function for daily consumption based on student count and recipe.
+ * Major update: Cost is constant ₹2.36 per student (cooking cost). No ingredient costing.
  */
 export function calculateDayConsumption(
   students: number,
@@ -22,7 +29,8 @@ export function calculateDayConsumption(
 
   let totalGrainsPulsesKg = 0;
   let totalVegetablesKg = 0;
-  let totalCookingCost = 0;
+  // Constant cost of 2.36 rupees per student
+  const totalCookingCost = Number((validStudents * CONSTANT_COOKING_COST_PER_STUDENT).toFixed(2));
 
   // 1. If rice is included in recipe
   if (recipe.includesRice) {
@@ -31,11 +39,8 @@ export function calculateDayConsumption(
       const gramsPerStudent = recipe.riceGrams || riceIngredient.defaultGrams;
       const totalGrams = validStudents * gramsPerStudent;
       const totalKg = Number((totalGrams / 1000).toFixed(4));
-      const rate = riceIngredient.ratePerKg || 0;
-      const cost = Number((totalKg * rate).toFixed(2));
 
       totalGrainsPulsesKg += totalKg;
-      totalCookingCost += cost;
 
       items.push({
         ingredientId: riceIngredient.id,
@@ -45,8 +50,8 @@ export function calculateDayConsumption(
         gramsPerStudent,
         totalGrams,
         totalKg,
-        ratePerKg: rate,
-        cost,
+        ratePerKg: 0,
+        cost: 0,
       });
     }
   }
@@ -59,11 +64,8 @@ export function calculateDayConsumption(
     const gramsPerStudent = recipe.pulseGrams || pulseIngredient.defaultGrams;
     const totalGrams = validStudents * gramsPerStudent;
     const totalKg = Number((totalGrams / 1000).toFixed(4));
-    const rate = pulseIngredient.ratePerKg || 0;
-    const cost = Number((totalKg * rate).toFixed(2));
 
     totalGrainsPulsesKg += totalKg;
-    totalCookingCost += cost;
 
     items.push({
       ingredientId: pulseIngredient.id,
@@ -73,8 +75,8 @@ export function calculateDayConsumption(
       gramsPerStudent,
       totalGrams,
       totalKg,
-      ratePerKg: rate,
-      cost,
+      ratePerKg: 0,
+      cost: 0,
     });
   }
 
@@ -88,13 +90,10 @@ export function calculateDayConsumption(
     const gramsPerStudent = recipe.customCondiments?.[ing.id] ?? ing.defaultGrams;
     const totalGrams = validStudents * gramsPerStudent;
     const totalKg = Number((totalGrams / 1000).toFixed(4));
-    const rate = ing.ratePerKg || 0;
-    const cost = Number((totalKg * rate).toFixed(2));
 
     if (ing.category === 'vegetable') {
       totalVegetablesKg += totalKg;
     }
-    totalCookingCost += cost;
 
     items.push({
       ingredientId: ing.id,
@@ -104,8 +103,8 @@ export function calculateDayConsumption(
       gramsPerStudent,
       totalGrams,
       totalKg,
-      ratePerKg: rate,
-      cost,
+      ratePerKg: 0,
+      cost: 0,
     });
   }
 
@@ -117,7 +116,7 @@ export function calculateDayConsumption(
     items,
     totalGrainsPulsesKg: Number(totalGrainsPulsesKg.toFixed(3)),
     totalVegetablesKg: Number(totalVegetablesKg.toFixed(3)),
-    totalCookingCost: Number(totalCookingCost.toFixed(2)),
+    totalCookingCost,
   };
 }
 
