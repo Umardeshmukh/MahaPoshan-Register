@@ -1,7 +1,12 @@
 import * as XLSX from 'xlsx';
 import { AppData, DailyRegisterEntry } from '../types';
 import { getMonthNames, toMarathiDigits } from './mdm-calculator';
-import { OFFICIAL_REGISTER_COLUMNS } from './constants';
+import {
+  OFFICIAL_REGISTER_COLUMNS,
+  isSpice,
+  getColumnUnitLabel,
+  getStockInDisplayUnit,
+} from './constants';
 
 /**
  * Exports Monthly Register in the exact format of Government of Maharashtra
@@ -66,17 +71,17 @@ export function exportMonthlyRegisterToExcel(
     '',
     '',
     '',
-    'वजन (किलोग्रॅममध्ये)',
+    'वजन (डाळी: कि.ग्रॅ. | मसाले: ग्रॅम | पूरक: नग)',
   ]);
   rows.push([]);
 
-  // Column Headers - Row 1: Names (Cols 1 to 24)
+  // Column Headers - Row 1: Names with unit labels (Cols 1 to 24)
   const headerRow1 = [
     'दिनांक',
     'तपशील',
     'दैनिक उपस्थिती / लाभार्थी',
     'प्रत्यक्ष लाभार्थी / ताटांची संख्या',
-    ...OFFICIAL_REGISTER_COLUMNS.map((c) => c.nameMr),
+    ...OFFICIAL_REGISTER_COLUMNS.map((c) => `${c.nameMr} (${getColumnUnitLabel(c.id)})`),
     'लाभार्थी - नुसार होणारा खर्च',
   ];
   rows.push(headerRow1);
@@ -92,7 +97,7 @@ export function exportMonthlyRegisterToExcel(
   ];
   rows.push(headerRow2);
 
-  // Accumulators for month totals
+  // Accumulators for month totals (Pulses in KG, Spices in Grams)
   let totalAttendance = 0;
   let totalPlates = 0;
   let totalMonthCost = 0;
@@ -102,8 +107,13 @@ export function exportMonthlyRegisterToExcel(
   // 1. मागील शिल्लक साहित्य (Opening Stock)
   const openingRow: (string | number)[] = ['', 'मागील शिल्लक साहित्य', '', ''];
   OFFICIAL_REGISTER_COLUMNS.forEach((c) => {
-    const val = inward[c.id]?.openingStockKg || 0;
-    openingRow.push(val > 0 ? Number(val.toFixed(3)) : '-');
+    const rawVal = inward[c.id]?.openingStockKg || 0;
+    const val = getStockInDisplayUnit(rawVal, c.id);
+    if (val > 0) {
+      openingRow.push(isSpice(c.id) || c.id === 'purak_aahar' ? Number(val.toFixed(1)) : Number(val.toFixed(3)));
+    } else {
+      openingRow.push('-');
+    }
   });
   openingRow.push('-');
   rows.push(openingRow);
@@ -111,8 +121,13 @@ export function exportMonthlyRegisterToExcel(
   // 2. प्राप्त साहित्य (Received Stock)
   const receivedRow: (string | number)[] = ['', 'प्राप्त साहित्य', '', ''];
   OFFICIAL_REGISTER_COLUMNS.forEach((c) => {
-    const val = inward[c.id]?.receivedStockKg || 0;
-    receivedRow.push(val > 0 ? Number(val.toFixed(3)) : '-');
+    const rawVal = inward[c.id]?.receivedStockKg || 0;
+    const val = getStockInDisplayUnit(rawVal, c.id);
+    if (val > 0) {
+      receivedRow.push(isSpice(c.id) || c.id === 'purak_aahar' ? Number(val.toFixed(1)) : Number(val.toFixed(3)));
+    } else {
+      receivedRow.push('-');
+    }
   });
   receivedRow.push('-');
   rows.push(receivedRow);
@@ -120,10 +135,14 @@ export function exportMonthlyRegisterToExcel(
   // 3. एकूण साहित्य (Total Stock = Opening + Received)
   const totalStockRow: (string | number)[] = ['', 'एकूण साहित्य', '', ''];
   OFFICIAL_REGISTER_COLUMNS.forEach((c) => {
-    const openVal = inward[c.id]?.openingStockKg || 0;
-    const recVal = inward[c.id]?.receivedStockKg || 0;
-    const tot = openVal + recVal;
-    totalStockRow.push(tot > 0 ? Number(tot.toFixed(3)) : '-');
+    const rawOpen = inward[c.id]?.openingStockKg || 0;
+    const rawRec = inward[c.id]?.receivedStockKg || 0;
+    const tot = getStockInDisplayUnit(rawOpen, c.id) + getStockInDisplayUnit(rawRec, c.id);
+    if (tot > 0) {
+      totalStockRow.push(isSpice(c.id) || c.id === 'purak_aahar' ? Number(tot.toFixed(1)) : Number(tot.toFixed(3)));
+    } else {
+      totalStockRow.push('-');
+    }
   });
   totalStockRow.push('-');
   rows.push(totalStockRow);
@@ -178,12 +197,35 @@ export function exportMonthlyRegisterToExcel(
     ];
 
     OFFICIAL_REGISTER_COLUMNS.forEach((col) => {
-      const kg = entry.items[col.id]?.kg || 0;
-      if (kg > 0) {
-        colConsumedTotals[col.id] = (colConsumedTotals[col.id] || 0) + kg;
-        row.push(Number(kg.toFixed(3)));
-      } else {
+      const itemData = entry.items[col.id];
+      if (!itemData) {
         row.push('-');
+        return;
+      }
+      if (isSpice(col.id)) {
+        const g = itemData.grams || 0;
+        if (g > 0) {
+          colConsumedTotals[col.id] = (colConsumedTotals[col.id] || 0) + g;
+          row.push(Number(g.toFixed(1)));
+        } else {
+          row.push('-');
+        }
+      } else if (col.id === 'purak_aahar') {
+        const nag = itemData.grams || 0;
+        if (nag > 0) {
+          colConsumedTotals[col.id] = (colConsumedTotals[col.id] || 0) + nag;
+          row.push(nag);
+        } else {
+          row.push('-');
+        }
+      } else {
+        const kg = itemData.kg || 0;
+        if (kg > 0) {
+          colConsumedTotals[col.id] = (colConsumedTotals[col.id] || 0) + kg;
+          row.push(Number(kg.toFixed(3)));
+        } else {
+          row.push('-');
+        }
       }
     });
 
@@ -199,8 +241,16 @@ export function exportMonthlyRegisterToExcel(
     totalPlates > 0 ? totalPlates : '-',
   ];
   OFFICIAL_REGISTER_COLUMNS.forEach((c) => {
-    const totKg = colConsumedTotals[c.id] || 0;
-    consumedTotalRow.push(totKg > 0 ? Number(totKg.toFixed(3)) : '-');
+    const totVal = colConsumedTotals[c.id] || 0;
+    if (totVal <= 0) {
+      consumedTotalRow.push('-');
+    } else if (isSpice(c.id)) {
+      consumedTotalRow.push(Number(totVal.toFixed(1)));
+    } else if (c.id === 'purak_aahar') {
+      consumedTotalRow.push(totVal);
+    } else {
+      consumedTotalRow.push(Number(totVal.toFixed(3)));
+    }
   });
   consumedTotalRow.push(totalMonthCost > 0 ? Number(totalMonthCost.toFixed(2)) : '-');
   rows.push(consumedTotalRow);
@@ -213,11 +263,19 @@ export function exportMonthlyRegisterToExcel(
     '-',
   ];
   OFFICIAL_REGISTER_COLUMNS.forEach((c) => {
-    const openVal = inward[c.id]?.openingStockKg || 0;
-    const recVal = inward[c.id]?.receivedStockKg || 0;
+    const rawOpen = inward[c.id]?.openingStockKg || 0;
+    const rawRec = inward[c.id]?.receivedStockKg || 0;
+    const openVal = getStockInDisplayUnit(rawOpen, c.id);
+    const recVal = getStockInDisplayUnit(rawRec, c.id);
     const consumed = colConsumedTotals[c.id] || 0;
     const closing = openVal + recVal - consumed;
-    closingStockRow.push(Number(closing.toFixed(3)));
+    if (isSpice(c.id)) {
+      closingStockRow.push(Number(closing.toFixed(1)));
+    } else if (c.id === 'purak_aahar') {
+      closingStockRow.push(Number(closing.toFixed(0)));
+    } else {
+      closingStockRow.push(Number(closing.toFixed(3)));
+    }
   });
   closingStockRow.push('-');
   rows.push(closingStockRow);

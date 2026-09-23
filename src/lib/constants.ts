@@ -246,6 +246,57 @@ export const OFFICIAL_REGISTER_COLUMNS = [
   { colNum: 23, id: 'milk_powder', nameMr: 'दूध / दूध पावडर', nameEn: 'Milk / Milk Powder' },
 ] as const;
 
+/**
+ * Pulses & legumes calculated in KG at the end of the month
+ */
+export const PULSE_IDS = [
+  'moong_dal',
+  'tur_dal',
+  'masoor_dal',
+  'matki',
+  'moong',
+  'chavli',
+  'harbhara',
+  'green_peas',
+  'soya_vadi',
+] as const;
+
+/**
+ * Spices & condiments calculated in GRAMS at the end of the month
+ */
+export const SPICE_IDS = [
+  'cumin',
+  'mustard',
+  'turmeric',
+  'chili_masala',
+  'salt',
+] as const;
+
+export function isPulse(id: string): boolean {
+  return (PULSE_IDS as readonly string[]).includes(id);
+}
+
+export function isSpice(id: string): boolean {
+  return (SPICE_IDS as readonly string[]).includes(id);
+}
+
+export function getColumnUnitLabel(id: string): string {
+  if (isSpice(id)) return 'ग्रॅम';
+  if (id === 'purak_aahar') return 'नग';
+  if (id === 'oil') return 'लिटर';
+  return 'कि.ग्रॅ.'; // Pulses, rice, vegetables, etc.
+}
+
+export function getStockInDisplayUnit(rawVal: number, ingredientId: string): number {
+  if (rawVal <= 0) return 0;
+  if (isSpice(ingredientId)) {
+    // If raw stock was recorded in kg (<= 10 kg), convert to grams (e.g., 2 kg -> 2000 g)
+    // If entered in grams (> 10 g, e.g., 200g, 500g), keep as grams
+    return rawVal <= 10 ? rawVal * 1000 : rawVal;
+  }
+  return rawVal;
+}
+
 export const DEFAULT_RECIPES: DishRecipe[] = [
   {
     id: 'mon_masoor',
