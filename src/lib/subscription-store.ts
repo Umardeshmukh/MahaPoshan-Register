@@ -365,89 +365,167 @@ export function approveAccessRequest(
   // Sync with referral store: Mark referral reward eligible
   syncReferralStatusWithSubscription(requestId, 'active');
 
+  if (requests[reqIndex].clerkUserId) {
+    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+  }
+  syncAllRequestsCache = null;
+
   return requests[reqIndex];
+}
+
+// TTL Cache for cloud access status checks (60 seconds)
+interface AccessStatusCacheEntry {
+  status: SubscriptionStatus | null;
+  expiresAt: number;
+}
+const accessStatusCache = new Map<string, AccessStatusCacheEntry>();
+const inFlightAccessStatusPromises = new Map<string, Promise<SubscriptionStatus | null>>();
+
+// In-flight and short TTL cache for Super Admin sync (15 seconds)
+let syncAllRequestsPromise: Promise<UserAccessRequest[]> | null = null;
+let syncAllRequestsCache: { data: UserAccessRequest[]; expiresAt: number } | null = null;
+
+export function invalidateAccessStatusCache(clerkUserId?: string): void {
+  if (clerkUserId) {
+    accessStatusCache.delete(clerkUserId);
+  } else {
+    accessStatusCache.clear();
+  }
+  syncAllRequestsCache = null;
 }
 
 /**
  * Loads all school requests from Supabase Cloud and synchronizes local storage.
- * Used by Super Admin Panel to see requests from any user and device in real time.
+ * Deduplicates in-flight requests and caches for 15s to reduce redundant roundtrips.
  */
-export async function syncAllRequestsFromCloud(): Promise<UserAccessRequest[]> {
-  const cloudSchools = await fetchAllSchoolsFromCloud();
-  if (cloudSchools.length === 0) {
-    return loadRequests();
+export async function syncAllRequestsFromCloud(forceRefresh: boolean = false): Promise<UserAccessRequest[]> {
+  const now = Date.now();
+  if (!forceRefresh && syncAllRequestsCache && syncAllRequestsCache.expiresAt > now) {
+    return syncAllRequestsCache.data;
   }
 
-  const localRequests = loadRequests();
-  const mergedMap = new Map<string, UserAccessRequest>();
+  if (syncAllRequestsPromise) {
+    return syncAllRequestsPromise;
+  }
 
-  // Add local requests first
-  localRequests.forEach((r) => {
-    if (r.clerkUserId) mergedMap.set(r.clerkUserId, r);
-    else mergedMap.set(r.id, r);
-  });
+  syncAllRequestsPromise = (async () => {
+    try {
+      const cloudSchools = await fetchAllSchoolsFromCloud();
+      if (cloudSchools.length === 0) {
+        return loadRequests();
+      }
 
-  // Cloud is the master source of truth - merge with cloud data
-  cloudSchools.forEach((c) => {
-    const key = c.clerkUserId || c.id;
-    const existing = mergedMap.get(key);
-    if (existing) {
-      mergedMap.set(key, {
-        ...existing,
-        ...c,
-        phone: c.phone || existing.phone,
-        notes: c.notes || existing.notes,
+      const localRequests = loadRequests();
+      const mergedMap = new Map<string, UserAccessRequest>();
+
+      // Add local requests first
+      localRequests.forEach((r) => {
+        if (r.clerkUserId) mergedMap.set(r.clerkUserId, r);
+        else mergedMap.set(r.id, r);
       });
-    } else {
-      mergedMap.set(key, c);
+
+      // Cloud is the master source of truth - merge with cloud data
+      cloudSchools.forEach((c) => {
+        const key = c.clerkUserId || c.id;
+        const existing = mergedMap.get(key);
+        if (existing) {
+          mergedMap.set(key, {
+            ...existing,
+            ...c,
+            phone: c.phone || existing.phone,
+            notes: c.notes || existing.notes,
+          });
+        } else {
+          mergedMap.set(key, c);
+        }
+      });
+
+      const merged = Array.from(mergedMap.values()).sort(
+        (a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
+      );
+
+      saveRequests(merged);
+      syncAllRequestsCache = {
+        data: merged,
+        expiresAt: Date.now() + 15000, // 15s TTL
+      };
+      return merged;
+    } finally {
+      syncAllRequestsPromise = null;
     }
-  });
+  })();
 
-  const merged = Array.from(mergedMap.values()).sort(
-    (a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
-  );
-
-  saveRequests(merged);
-  return merged;
+  return syncAllRequestsPromise;
 }
 
 /**
  * Checks live access status directly against Supabase for a given user.
- * Updates local cache if cloud status has changed.
+ * Implements a 60-second TTL cache and in-flight request deduplication
+ * to avoid hammering Supabase on every component re-render or tab switch.
  */
 export async function checkCloudAccessStatus(
   clerkUserId?: string,
-  userEmail?: string
+  userEmail?: string,
+  forceRefresh: boolean = false
 ): Promise<SubscriptionStatus | null> {
   if (!clerkUserId) return null;
 
-  try {
-    const cloudRecord = await fetchUserSchoolFromCloud(clerkUserId);
-    if (!cloudRecord) return null;
-
-    const requests = loadRequests();
-    const idx = requests.findIndex(
-      (r) =>
-        r.clerkUserId === clerkUserId ||
-        (userEmail && r.userEmail.toLowerCase().trim() === userEmail.toLowerCase().trim())
-    );
-
-    if (idx >= 0) {
-      requests[idx] = {
-        ...requests[idx],
-        ...cloudRecord,
-      };
-      saveRequests(requests);
-    } else {
-      requests.unshift(cloudRecord);
-      saveRequests(requests);
+  const now = Date.now();
+  if (!forceRefresh) {
+    const cached = accessStatusCache.get(clerkUserId);
+    if (cached && cached.expiresAt > now) {
+      return cached.status;
     }
-
-    return cloudRecord.status;
-  } catch (err) {
-    console.error('Failed to check cloud access status:', err);
-    return null;
   }
+
+  // Deduplicate concurrent in-flight checks
+  const existingPromise = inFlightAccessStatusPromises.get(clerkUserId);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const checkPromise = (async (): Promise<SubscriptionStatus | null> => {
+    try {
+      const cloudRecord = await fetchUserSchoolFromCloud(clerkUserId);
+      if (!cloudRecord) {
+        accessStatusCache.set(clerkUserId, { status: null, expiresAt: Date.now() + 30000 });
+        return null;
+      }
+
+      const requests = loadRequests();
+      const idx = requests.findIndex(
+        (r) =>
+          r.clerkUserId === clerkUserId ||
+          (userEmail && r.userEmail.toLowerCase().trim() === userEmail.toLowerCase().trim())
+      );
+
+      if (idx >= 0) {
+        requests[idx] = {
+          ...requests[idx],
+          ...cloudRecord,
+        };
+        saveRequests(requests);
+      } else {
+        requests.unshift(cloudRecord);
+        saveRequests(requests);
+      }
+
+      accessStatusCache.set(clerkUserId, {
+        status: cloudRecord.status,
+        expiresAt: Date.now() + 60000, // 60s TTL
+      });
+
+      return cloudRecord.status;
+    } catch (err) {
+      console.error('Failed to check cloud access status:', err);
+      return null;
+    } finally {
+      inFlightAccessStatusPromises.delete(clerkUserId);
+    }
+  })();
+
+  inFlightAccessStatusPromises.set(clerkUserId, checkPromise);
+  return checkPromise;
 }
 
 /**
@@ -476,6 +554,10 @@ export function extendSubscription(
   };
 
   saveRequests(requests);
+  if (requests[reqIndex].clerkUserId) {
+    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+  }
+  syncAllRequestsCache = null;
   return requests[reqIndex];
 }
 
@@ -500,6 +582,11 @@ export function rejectOrRevokeAccess(
 
   // Sync with referral store
   syncReferralStatusWithSubscription(requestId, 'rejected');
+
+  if (requests[reqIndex].clerkUserId) {
+    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+  }
+  syncAllRequestsCache = null;
 
   return requests[reqIndex];
 }
@@ -531,6 +618,11 @@ export function scheduleAccountDeletion(
 
   // Sync with referral store
   syncReferralStatusWithSubscription(requestId, 'rejected');
+
+  if (requests[reqIndex].clerkUserId) {
+    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+  }
+  syncAllRequestsCache = null;
 
   // Push notification for audit trail
   const notifs = getAdminNotifications();
@@ -577,6 +669,11 @@ export function cancelAccountDeletion(requestId: string): UserAccessRequest | nu
   // Sync with referral store
   syncReferralStatusWithSubscription(requestId, restoredStatus);
 
+  if (requests[reqIndex].clerkUserId) {
+    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+  }
+  syncAllRequestsCache = null;
+
   return requests[reqIndex];
 }
 
@@ -590,6 +687,8 @@ export function permanentPurgeAccount(requestId: string): void {
   saveRequests(filtered);
 
   if (target?.clerkUserId) {
+    invalidateAccessStatusCache(target.clerkUserId);
+    syncAllRequestsCache = null;
     purgeUserDataFromCloud(target.clerkUserId).catch((err) =>
       console.warn('Failed purging cloud data for purged account:', err)
     );

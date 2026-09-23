@@ -7,6 +7,71 @@ let currentSyncStatus: SyncStatus = 'idle';
 let cachedSchoolId: string | null = null;
 const statusListeners = new Set<(status: SyncStatus) => void>();
 
+// In-flight query deduplication map
+const inFlightPullPromises = new Map<string, Promise<any>>();
+
+// Offline action queue stored in localStorage
+const OFFLINE_QUEUE_KEY = 'pm_poshan_offline_sync_queue_v1';
+
+interface QueuedSyncAction {
+  type: 'daily_entry' | 'daily_delete' | 'stock_inward' | 'profile';
+  payload: any;
+  clerkUserId: string;
+  timestamp: string;
+}
+
+function getOfflineQueue(): QueuedSyncAction[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveOfflineQueue(queue: QueuedSyncAction[]): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  } catch (err) {
+    console.warn('Failed to save offline queue:', err);
+  }
+}
+
+function pushToOfflineQueue(action: QueuedSyncAction): void {
+  const queue = getOfflineQueue();
+  // Filter out any duplicate pending updates for same resource
+  const filtered = queue.filter((item) => {
+    if (item.type === action.type && item.clerkUserId === action.clerkUserId) {
+      if (item.type === 'daily_entry' && item.payload?.date === action.payload?.date) return false;
+      if (item.type === 'daily_delete' && item.payload === action.payload) return false;
+      if (item.type === 'stock_inward' && item.payload?.monthKey === action.payload?.monthKey) return false;
+    }
+    return true;
+  });
+  filtered.push(action);
+  saveOfflineQueue(filtered);
+}
+
+// Auto-reconnect and lifecycle event handlers
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    console.log('[CloudSync] Network restored. Processing offline queue...');
+    processOfflineQueue().catch(console.error);
+    flushPendingSync().catch(console.error);
+  });
+
+  window.addEventListener('offline', () => {
+    console.log('[CloudSync] Browser offline.');
+    setSyncStatus('offline');
+  });
+
+  window.addEventListener('beforeunload', () => {
+    flushPendingSync().catch(() => {});
+  });
+}
+
 export function getCachedSchoolId(): string | null {
   return cachedSchoolId;
 }
@@ -35,6 +100,7 @@ function setSyncStatus(status: SyncStatus): void {
 /**
  * Pulls all user data from Supabase for a given Clerk user.
  * Returns hydrated AppData or null if no cloud data exists yet.
+ * Deduplicates in-flight requests to eliminate duplicate queries.
  */
 export async function pullUserDataFromCloud(
   clerkUserId: string
@@ -46,160 +112,312 @@ export async function pullUserDataFromCloud(
 } | null> {
   if (!isSupabaseConfigured() || !clerkUserId) return null;
 
-  try {
-    setSyncStatus('syncing');
+  // In-flight deduplication: reuse active promise if already querying for this user
+  const existingPull = inFlightPullPromises.get(clerkUserId);
+  if (existingPull) {
+    return existingPull;
+  }
 
-    // 1. Fetch School Profile
-    const schoolPromise = supabase
-      .from('schools')
-      .select('*')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle();
+  const pullPromise = (async () => {
+    try {
+      setSyncStatus('syncing');
 
-    // 2. Fetch All Daily Entries
-    const entriesPromise = supabase
-      .from('daily_entries')
-      .select('*')
-      .eq('clerk_user_id', clerkUserId);
+      // 1. Fetch School Profile
+      const schoolPromise = supabase
+        .from('schools')
+        .select('*')
+        .eq('clerk_user_id', clerkUserId)
+        .maybeSingle();
 
-    // 3. Fetch All Monthly Stock Inwards
-    const stockPromise = supabase
-      .from('stock_inward')
-      .select('*')
-      .eq('clerk_user_id', clerkUserId);
+      // 2. Fetch All Daily Entries
+      const entriesPromise = supabase
+        .from('daily_entries')
+        .select('*')
+        .eq('clerk_user_id', clerkUserId);
 
-    const [schoolRes, entriesRes, stockRes] = await Promise.all([
-      schoolPromise,
-      entriesPromise,
-      stockPromise,
-    ]);
+      // 3. Fetch All Monthly Stock Inwards
+      const stockPromise = supabase
+        .from('stock_inward')
+        .select('*')
+        .eq('clerk_user_id', clerkUserId);
 
-    let hasAnyData = false;
-    let profile: SchoolProfile | undefined = undefined;
-    const dailyEntries: Record<string, DailyRegisterEntry> = {};
-    const stockInward: Record<string, MonthlyStockInward> = {};
+      const [schoolRes, entriesRes, stockRes] = await Promise.all([
+        schoolPromise,
+        entriesPromise,
+        stockPromise,
+      ]);
 
-    if (schoolRes.data) {
-      hasAnyData = true;
-      cachedSchoolId = schoolRes.data.id || null;
-      profile = {
-        schoolName: schoolRes.data.school_name || '',
-        udiseNumber: schoolRes.data.udise_number || '',
-        centerCluster: schoolRes.data.center_cluster || '',
-        standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
-        district: schoolRes.data.district || '',
-        taluka: schoolRes.data.taluka || '',
-        headmasterName: schoolRes.data.headmaster_name || '',
-        inchargeTeacher: schoolRes.data.incharge_teacher || '',
-        cookName: schoolRes.data.cook_name || '',
-      };
-    }
+      let hasAnyData = false;
+      let profile: SchoolProfile | undefined = undefined;
+      const dailyEntries: Record<string, DailyRegisterEntry> = {};
+      const stockInward: Record<string, MonthlyStockInward> = {};
 
-    // Clean out legacy demo seed pollution if encountered
-    const isLegacyDemo =
-      profile?.udiseNumber === '27251403201' ||
-      (profile?.schoolName && profile.schoolName.includes('बोरगाव'));
-
-    if (isLegacyDemo) {
-      purgeUserRegisterDataFromCloud(clerkUserId).catch(() => {});
-      return null;
-    }
-
-    if (entriesRes.data && entriesRes.data.length > 0) {
-      hasAnyData = true;
-      entriesRes.data.forEach((row: any) => {
-        dailyEntries[row.date] = {
-          id: row.date,
-          date: row.date,
-          dayOfWeek: new Date(row.date).getDay() || 7,
-          dayNameMr: '',
-          dayNameEn: '',
-          dishId: row.dish_id,
-          dishNameMr: row.dish_name_mr,
-          dishNameEn: row.dish_name_en || '',
-          studentCount: row.student_count,
-          items: row.items || {},
-          totalGrainsPulsesKg: Number(row.total_grains_pulses_kg) || 0,
-          totalVegetablesKg: Number(row.total_vegetables_kg) || 0,
-          totalCookingCost: Number(row.total_cooking_cost) || 0,
-          remarks: row.remarks || '',
-          savedAt: row.saved_at || new Date().toISOString(),
+      if (schoolRes.data) {
+        hasAnyData = true;
+        cachedSchoolId = schoolRes.data.id || null;
+        profile = {
+          schoolName: schoolRes.data.school_name || '',
+          udiseNumber: schoolRes.data.udise_number || '',
+          centerCluster: schoolRes.data.center_cluster || '',
+          standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
+          district: schoolRes.data.district || '',
+          taluka: schoolRes.data.taluka || '',
+          headmasterName: schoolRes.data.headmaster_name || '',
+          inchargeTeacher: schoolRes.data.incharge_teacher || '',
+          cookName: schoolRes.data.cook_name || '',
         };
-      });
-    }
+      }
 
-    if (stockRes.data && stockRes.data.length > 0) {
-      hasAnyData = true;
-      stockRes.data.forEach((row: any) => {
-        stockInward[row.month_key] = row.stock_data || {};
-      });
-    }
+      // Clean out legacy demo seed pollution if encountered
+      const isLegacyDemo =
+        profile?.udiseNumber === '27251403201' ||
+        (profile?.schoolName && profile.schoolName.includes('बोरगाव'));
 
-    setSyncStatus('synced');
+      if (isLegacyDemo) {
+        purgeUserRegisterDataFromCloud(clerkUserId).catch(() => {});
+        return null;
+      }
 
-    if (!hasAnyData) {
+      if (entriesRes.data && entriesRes.data.length > 0) {
+        hasAnyData = true;
+        entriesRes.data.forEach((row: any) => {
+          dailyEntries[row.date] = {
+            id: row.date,
+            date: row.date,
+            dayOfWeek: new Date(row.date).getDay() || 7,
+            dayNameMr: '',
+            dayNameEn: '',
+            dishId: row.dish_id,
+            dishNameMr: row.dish_name_mr,
+            dishNameEn: row.dish_name_en || '',
+            studentCount: row.student_count,
+            items: row.items || {},
+            totalGrainsPulsesKg: Number(row.total_grains_pulses_kg) || 0,
+            totalVegetablesKg: Number(row.total_vegetables_kg) || 0,
+            totalCookingCost: Number(row.total_cooking_cost) || 0,
+            remarks: row.remarks || '',
+            savedAt: row.saved_at || new Date().toISOString(),
+          };
+        });
+      }
+
+      if (stockRes.data && stockRes.data.length > 0) {
+        hasAnyData = true;
+        stockRes.data.forEach((row: any) => {
+          stockInward[row.month_key] = row.stock_data || {};
+        });
+      }
+
+      setSyncStatus('synced');
+
+      if (!hasAnyData) {
+        return null;
+      }
+
+      return {
+        profile,
+        dailyEntries,
+        stockInward,
+      };
+    } catch (error) {
+      console.error('Failed to pull user data from Supabase:', error);
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setSyncStatus('offline');
+      } else {
+        setSyncStatus('error');
+      }
       return null;
     }
+  })();
 
-    return {
-      profile,
-      dailyEntries,
-      stockInward,
-    };
-  } catch (error) {
-    console.error('Failed to pull user data from Supabase:', error);
-    setSyncStatus('error');
-    return null;
+  inFlightPullPromises.set(clerkUserId, pullPromise);
+  try {
+    return await pullPromise;
+  } finally {
+    inFlightPullPromises.delete(clerkUserId);
   }
 }
 
+// Debounce queue for writes to coalesce rapid changes
+const pendingDailyEntries = new Map<string, { entry: DailyRegisterEntry; clerkUserId: string }>();
+const pendingStockInwards = new Map<string, { monthKey: string; stockData: MonthlyStockInward; clerkUserId: string }>();
+let debounceTimer: any = null;
+
 /**
- * Upserts a single daily register entry into Supabase.
+ * Flushes all queued debounced writes immediately to Supabase in batches.
  */
-export async function syncDailyEntryToCloud(
-  entry: DailyRegisterEntry,
-  clerkUserId: string
-): Promise<void> {
-  if (!isSupabaseConfigured() || !clerkUserId) return;
+export async function flushPendingSync(): Promise<void> {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+
+  if (!isSupabaseConfigured()) return;
+
+  const entriesToFlush = Array.from(pendingDailyEntries.values());
+  const stockToFlush = Array.from(pendingStockInwards.values());
+
+  pendingDailyEntries.clear();
+  pendingStockInwards.clear();
+
+  if (entriesToFlush.length === 0 && stockToFlush.length === 0) return;
 
   try {
     setSyncStatus('syncing');
 
-    const row: any = {
-      clerk_user_id: clerkUserId,
-      date: entry.date,
-      dish_id: entry.dishId,
-      dish_name_mr: entry.dishNameMr,
-      dish_name_en: entry.dishNameEn || '',
-      student_count: entry.studentCount,
-      items: entry.items || {},
-      total_grains_pulses_kg: entry.totalGrainsPulsesKg || 0,
-      total_vegetables_kg: entry.totalVegetablesKg || 0,
-      total_cooking_cost: entry.totalCookingCost || 0,
-      remarks: entry.remarks || '',
-      saved_at: entry.savedAt || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      updated_by: clerkUserId,
-    };
+    const promises: PromiseLike<any>[] = [];
 
-    if (cachedSchoolId) {
-      row.school_id = cachedSchoolId;
+    if (entriesToFlush.length > 0) {
+      const rows = entriesToFlush.map(({ entry, clerkUserId }) => ({
+        school_id: cachedSchoolId || undefined,
+        clerk_user_id: clerkUserId,
+        date: entry.date,
+        dish_id: entry.dishId,
+        dish_name_mr: entry.dishNameMr,
+        dish_name_en: entry.dishNameEn || '',
+        student_count: entry.studentCount,
+        items: entry.items || {},
+        total_grains_pulses_kg: entry.totalGrainsPulsesKg || 0,
+        total_vegetables_kg: entry.totalVegetablesKg || 0,
+        total_cooking_cost: entry.totalCookingCost || 0,
+        remarks: entry.remarks || '',
+        saved_at: entry.savedAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        updated_by: clerkUserId,
+      }));
+
+      promises.push(
+        supabase.from('daily_entries').upsert(rows, { onConflict: 'clerk_user_id,date' })
+      );
     }
 
-    const { error } = await supabase
-      .from('daily_entries')
-      .upsert(row, { onConflict: 'clerk_user_id,date' });
+    if (stockToFlush.length > 0) {
+      const rows = stockToFlush.map(({ monthKey, stockData, clerkUserId }) => ({
+        school_id: cachedSchoolId || undefined,
+        clerk_user_id: clerkUserId,
+        month_key: monthKey,
+        stock_data: stockData || {},
+        updated_at: new Date().toISOString(),
+        updated_by: clerkUserId,
+      }));
 
-    if (error) {
-      console.warn('Supabase daily entry sync error:', error);
+      promises.push(
+        supabase.from('stock_inward').upsert(rows, { onConflict: 'clerk_user_id,month_key' })
+      );
+    }
+
+    const results = await Promise.all(promises);
+    const hasError = results.some((r) => r.error);
+    if (hasError) {
+      console.warn('Batch flush encountered error:', results.find((r) => r.error)?.error);
       setSyncStatus('error');
     } else {
       setSyncStatus('synced');
     }
   } catch (err) {
-    console.error('Failed to sync daily entry to Supabase:', err);
-    setSyncStatus('error');
+    console.error('Failed to flush pending sync to Supabase:', err);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSyncStatus('offline');
+    } else {
+      setSyncStatus('error');
+    }
   }
+}
+
+/**
+ * Processes queued actions saved when the app was offline.
+ */
+export async function processOfflineQueue(): Promise<void> {
+  const queue = getOfflineQueue();
+  if (queue.length === 0 || !isSupabaseConfigured()) return;
+
+  try {
+    setSyncStatus('syncing');
+    const remainingQueue: QueuedSyncAction[] = [];
+
+    for (const item of queue) {
+      try {
+        if (item.type === 'daily_entry') {
+          const row: any = {
+            clerk_user_id: item.clerkUserId,
+            date: item.payload.date,
+            dish_id: item.payload.dishId,
+            dish_name_mr: item.payload.dishNameMr,
+            dish_name_en: item.payload.dishNameEn || '',
+            student_count: item.payload.studentCount,
+            items: item.payload.items || {},
+            total_grains_pulses_kg: item.payload.totalGrainsPulsesKg || 0,
+            total_vegetables_kg: item.payload.totalVegetablesKg || 0,
+            total_cooking_cost: item.payload.totalCookingCost || 0,
+            remarks: item.payload.remarks || '',
+            saved_at: item.payload.savedAt || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            updated_by: item.clerkUserId,
+          };
+          if (cachedSchoolId) row.school_id = cachedSchoolId;
+          const { error } = await supabase.from('daily_entries').upsert(row, { onConflict: 'clerk_user_id,date' });
+          if (error) remainingQueue.push(item);
+        } else if (item.type === 'daily_delete') {
+          const { error } = await supabase.from('daily_entries').delete().match({ clerk_user_id: item.clerkUserId, date: item.payload });
+          if (error) remainingQueue.push(item);
+        } else if (item.type === 'stock_inward') {
+          const row: any = {
+            clerk_user_id: item.clerkUserId,
+            month_key: item.payload.monthKey,
+            stock_data: item.payload.stockData || {},
+            updated_at: new Date().toISOString(),
+            updated_by: item.clerkUserId,
+          };
+          if (cachedSchoolId) row.school_id = cachedSchoolId;
+          const { error } = await supabase.from('stock_inward').upsert(row, { onConflict: 'clerk_user_id,month_key' });
+          if (error) remainingQueue.push(item);
+        }
+      } catch {
+        remainingQueue.push(item);
+      }
+    }
+
+    saveOfflineQueue(remainingQueue);
+    if (remainingQueue.length === 0) {
+      setSyncStatus('synced');
+    }
+  } catch (err) {
+    console.error('Failed to process offline queue:', err);
+  }
+}
+
+/**
+ * Upserts a single daily register entry into Supabase with write-coalescing.
+ * Rapid edits coalesce into a single batched flush.
+ */
+export async function syncDailyEntryToCloud(
+  entry: DailyRegisterEntry,
+  clerkUserId: string
+): Promise<void> {
+  if (!clerkUserId) return;
+
+  // If offline, save directly to persistent offline queue
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    pushToOfflineQueue({
+      type: 'daily_entry',
+      payload: entry,
+      clerkUserId,
+      timestamp: new Date().toISOString(),
+    });
+    setSyncStatus('offline');
+    return;
+  }
+
+  // Queue in debounce map to coalesce rapid consecutive writes
+  pendingDailyEntries.set(`${clerkUserId}_${entry.date}`, { entry, clerkUserId });
+  setSyncStatus('syncing');
+
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  debounceTimer = setTimeout(() => {
+    flushPendingSync().catch(console.error);
+  }, 800);
 }
 
 /**
@@ -209,7 +427,21 @@ export async function syncDeleteDailyEntryFromCloud(
   dateKey: string,
   clerkUserId: string
 ): Promise<void> {
-  if (!isSupabaseConfigured() || !clerkUserId) return;
+  if (!clerkUserId) return;
+
+  // Remove from pending debounced map if present
+  pendingDailyEntries.delete(`${clerkUserId}_${dateKey}`);
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    pushToOfflineQueue({
+      type: 'daily_delete',
+      payload: dateKey,
+      clerkUserId,
+      timestamp: new Date().toISOString(),
+    });
+    setSyncStatus('offline');
+    return;
+  }
 
   try {
     setSyncStatus('syncing');
@@ -232,44 +464,35 @@ export async function syncDeleteDailyEntryFromCloud(
 }
 
 /**
- * Upserts monthly stock inward data into Supabase.
+ * Upserts monthly stock inward data into Supabase with write-coalescing.
  */
 export async function syncStockInwardToCloud(
   monthKey: string,
   stockData: MonthlyStockInward,
   clerkUserId: string
 ): Promise<void> {
-  if (!isSupabaseConfigured() || !clerkUserId) return;
+  if (!clerkUserId) return;
 
-  try {
-    setSyncStatus('syncing');
-
-    const row: any = {
-      clerk_user_id: clerkUserId,
-      month_key: monthKey,
-      stock_data: stockData || {},
-      updated_at: new Date().toISOString(),
-      updated_by: clerkUserId,
-    };
-
-    if (cachedSchoolId) {
-      row.school_id = cachedSchoolId;
-    }
-
-    const { error } = await supabase
-      .from('stock_inward')
-      .upsert(row, { onConflict: 'clerk_user_id,month_key' });
-
-    if (error) {
-      console.warn('Supabase stock inward sync error:', error);
-      setSyncStatus('error');
-    } else {
-      setSyncStatus('synced');
-    }
-  } catch (err) {
-    console.error('Failed to sync stock inward to Supabase:', err);
-    setSyncStatus('error');
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    pushToOfflineQueue({
+      type: 'stock_inward',
+      payload: { monthKey, stockData },
+      clerkUserId,
+      timestamp: new Date().toISOString(),
+    });
+    setSyncStatus('offline');
+    return;
   }
+
+  pendingStockInwards.set(`${clerkUserId}_${monthKey}`, { monthKey, stockData, clerkUserId });
+  setSyncStatus('syncing');
+
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  debounceTimer = setTimeout(() => {
+    flushPendingSync().catch(console.error);
+  }, 800);
 }
 
 /**
@@ -604,7 +827,7 @@ export async function syncFullAppDataToCloud(
     // 1. Sync Profile
     await syncSchoolProfileToCloud(data.profile, clerkUserId, userEmail, userName);
 
-    // 2. Batch Sync Daily Entries
+    // 2. Batch Sync Daily Entries in chunks of 50 to prevent payload limits
     const entries = Object.values(data.dailyEntries || {});
     if (entries.length > 0) {
       const rows = entries.map((entry) => ({
@@ -625,9 +848,13 @@ export async function syncFullAppDataToCloud(
         updated_by: clerkUserId,
       }));
 
-      await supabase
-        .from('daily_entries')
-        .upsert(rows, { onConflict: 'clerk_user_id,date' });
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE);
+        await supabase
+          .from('daily_entries')
+          .upsert(chunk, { onConflict: 'clerk_user_id,date' });
+      }
     }
 
     // 3. Batch Sync Stock Inward

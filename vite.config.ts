@@ -24,6 +24,8 @@ try {
 }
 
 function resendDevPlugin(): Plugin {
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   return {
     name: 'resend-dev-api',
     configureServer(server) {
@@ -31,7 +33,8 @@ function resendDevPlugin(): Plugin {
         if (req.method === 'OPTIONS') {
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Accept');
+          res.setHeader('Access-Control-Max-Age', '86400');
           res.statusCode = 200;
           res.end();
           return;
@@ -40,7 +43,7 @@ function resendDevPlugin(): Plugin {
         if (req.method !== 'POST') {
           res.statusCode = 405;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+          res.end(JSON.stringify({ success: false, error: 'Method Not Allowed' }));
           return;
         }
 
@@ -61,15 +64,31 @@ function resendDevPlugin(): Plugin {
             const defaultTo =
               process.env.SUPER_ADMIN_EMAIL || 'umardesh@gmail.com';
 
-            const resend = new Resend(apiKey);
-            const result = await resend.emails.send({
-              from: body.from || defaultFrom,
-              to: body.to || defaultTo,
-              subject: body.subject || 'MahaPoshan Register Notification',
-              html: body.html || '<p>MahaPoshan Register Alert</p>',
-            });
+            const toAddress = (body.to && typeof body.to === 'string' ? body.to.trim() : defaultTo);
+            const fromAddress = (body.from && typeof body.from === 'string' ? body.from.trim() : defaultFrom);
 
             res.setHeader('Content-Type', 'application/json');
+
+            if (!EMAIL_REGEX.test(toAddress)) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ success: false, error: 'Invalid recipient email format' }));
+              return;
+            }
+
+            const resend = new Resend(apiKey);
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Resend dispatch timed out after 8s')), 8000)
+            );
+
+            const sendPromise = resend.emails.send({
+              from: fromAddress,
+              to: toAddress,
+              subject: body.subject?.slice(0, 300) || 'MahaPoshan Register Notification',
+              html: body.html?.slice(0, 250000) || '<p>MahaPoshan Register Alert</p>',
+            });
+
+            const result: any = await Promise.race([sendPromise, timeoutPromise]);
+
             if (result.error) {
               res.statusCode = 400;
               res.end(JSON.stringify({ success: false, error: result.error }));

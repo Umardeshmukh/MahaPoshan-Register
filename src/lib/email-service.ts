@@ -14,48 +14,104 @@ export interface SendEmailResponse {
   error?: any;
 }
 
+// Endpoint preference memory to avoid probing failed endpoints on subsequent dispatches
+let preferredEndpoint: string | null = null;
+
+// In-flight request deduplication & cooldown cache
+const inFlightRequests = new Map<string, Promise<SendEmailResponse>>();
+const recentDispatches = new Map<string, { response: SendEmailResponse; expiresAt: number }>();
+
+function generateRequestKey(options: SendEmailOptions): string {
+  return `${options.to || ''}_${options.subject}_${options.html.length}`;
+}
+
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResponse> {
-  const endpoints = ['/api/send-email', '/.netlify/functions/send-email'];
+  const key = generateRequestKey(options);
+  const now = Date.now();
 
-  for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(options),
-      });
-
-      const text = await response.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch (parseErr) {
-        // Returned HTML (e.g. 404/redirect), try next endpoint
-        continue;
-      }
-
-      if (response.ok && data.success) {
-        return {
-          success: true,
-          message: 'Email successfully sent via Resend',
-          id: data.data?.id,
-        };
-      }
-
-      if (data && data.error) {
-        console.warn(`Resend email endpoint ${endpoint} returned error:`, data.error);
-      }
-    } catch (error: any) {
-      console.warn(`Attempt on ${endpoint} failed:`, error?.message);
-    }
+  // 1. Check if identical request was already sent within the last 10 seconds (cooldown)
+  const cached = recentDispatches.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.response;
   }
 
-  return {
-    success: false,
-    message: 'Failed to dispatch email via serverless endpoints',
-  };
+  // 2. Check if identical request is already actively in-flight (deduplication)
+  const activePromise = inFlightRequests.get(key);
+  if (activePromise) {
+    return activePromise;
+  }
+
+  const dispatchPromise = (async (): Promise<SendEmailResponse> => {
+    const candidateEndpoints = preferredEndpoint
+      ? [preferredEndpoint, ...['/api/send-email', '/.netlify/functions/send-email'].filter((e) => e !== preferredEndpoint)]
+      : ['/api/send-email', '/.netlify/functions/send-email'];
+
+    for (const endpoint of candidateEndpoints) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(options),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        const text = await response.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          // Returned HTML (e.g. 404/redirect), try next endpoint
+          continue;
+        }
+
+        if (response.ok && data.success) {
+          preferredEndpoint = endpoint;
+          const successResponse: SendEmailResponse = {
+            success: true,
+            message: 'Email successfully sent via Resend',
+            id: data.data?.id,
+          };
+
+          // Cache in recent dispatches for 10s cooldown
+          recentDispatches.set(key, {
+            response: successResponse,
+            expiresAt: Date.now() + 10000,
+          });
+
+          return successResponse;
+        }
+
+        if (data && data.error) {
+          console.warn(`Resend email endpoint ${endpoint} returned error:`, data.error);
+        }
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.warn(`Email dispatch to ${endpoint} timed out after 8s`);
+        } else {
+          console.warn(`Attempt on ${endpoint} failed:`, error?.message);
+        }
+      }
+    }
+
+    return {
+      success: false,
+      message: 'Failed to dispatch email via serverless endpoints',
+    };
+  })();
+
+  inFlightRequests.set(key, dispatchPromise);
+  try {
+    return await dispatchPromise;
+  } finally {
+    inFlightRequests.delete(key);
+  }
 }
 
 /**

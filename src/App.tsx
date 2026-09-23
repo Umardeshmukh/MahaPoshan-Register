@@ -383,7 +383,11 @@ export default function App() {
   // Check live access status directly against Supabase on login / refresh
   useEffect(() => {
     if (isSignedIn && user?.id) {
-      checkCloudAccessStatus(user.id, user.primaryEmailAddress?.emailAddress).then((liveStatus) => {
+      checkCloudAccessStatus(
+        user.id,
+        user.primaryEmailAddress?.emailAddress,
+        accessRefreshTrigger > 0
+      ).then((liveStatus) => {
         if (liveStatus && liveStatus !== accessStatus.status) {
           setAccessRefreshTrigger((c) => c + 1);
         }
