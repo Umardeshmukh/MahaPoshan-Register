@@ -18,6 +18,8 @@ import {
   getColumnUnitLabel,
   getStockInDisplayUnit,
 } from '../lib/constants';
+import { Button, Badge, Card, StatCard, MonthPicker } from './ui';
+import { PageContainer } from './layout/PageContainer';
 import {
   FileSpreadsheet,
   FileText,
@@ -148,31 +150,15 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
     }));
   };
 
-  // Month options for selector
-  const monthOptions = useMemo(() => {
-    const options = [];
-    const base = new Date();
-    for (let i = -6; i <= 3; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const names = getMonthNames(key);
-      options.push({
-        key,
-        label: `${names.mr} ${names.year} (${names.en})`,
-      });
-    }
-    return options;
-  }, []);
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+    <PageContainer>
       {/* Top Banner & Action Bar */}
       <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-5 sm:p-7 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+            <Badge variant="warning" size="md">
               शासकीय नमुना भाग - २
-            </span>
+            </Badge>
             <span className="text-xs text-slate-500 font-mono">
               UDISE: {profile.udiseNumber}
             </span>
@@ -187,97 +173,89 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
 
         {/* Month Selector & Direct Download Actions */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
-          {/* Month selector */}
-          <div className="relative flex-1 sm:w-64">
-            <select
-              id="month-selector"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full h-12 bg-slate-50 border border-slate-300 rounded-xl px-4 text-xs sm:text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
-            >
-              {monthOptions.map((opt) => (
-                <option key={opt.key} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Month selector using MonthPicker primitive */}
+          <MonthPicker
+            id="month-selector"
+            value={selectedMonth}
+            onChange={setSelectedMonth}
+            className="flex-1 sm:w-64"
+          />
 
-          {/* Excel Export */}
-          <button
+          {/* Excel Export using Button primitive */}
+          <Button
             id="export-excel-btn"
-            type="button"
+            variant="emerald"
+            size="md"
             onClick={() => exportMonthlyRegisterToExcel(selectedMonth, appData)}
-            className="h-12 flex items-center justify-center gap-2 px-4 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer active:scale-98"
+            leftIcon={<FileSpreadsheet className="w-4 h-4" />}
             title="Export official ledger to Excel .xlsx"
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Excel (.xlsx)</span>
-          </button>
+            Excel (.xlsx)
+          </Button>
 
-          {/* Official Report Print / PDF View */}
-          <button
+          {/* Official Report Print / PDF View using Button primitive */}
+          <Button
             id="open-official-report-btn"
-            type="button"
+            variant="primary"
+            size="md"
             onClick={() => onOpenPrintView(selectedMonth)}
-            className="h-12 flex items-center justify-center gap-2 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer active:scale-98"
+            leftIcon={<Printer className="w-4 h-4" />}
             title="Open Official Government Report Part-2 (Print / Save as PDF)"
           >
-            <Printer className="w-4 h-4" />
-            <span>शासकीय अहवाल (Print)</span>
-          </button>
+            शासकीय अहवाल (Print)
+          </Button>
         </div>
       </div>
 
-      {/* KPI Summary Cards with Breathable Grid */}
+      {/* KPI Summary Cards using StatCard primitive */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs">
-          <span className="text-xs text-slate-500 block font-medium">
-            कामाचे दिवस
-          </span>
-          <div className="text-2xl font-black text-slate-900 mt-1 font-mono">
-            {summary.totalWorkingDays} <span className="text-xs font-normal text-slate-500">दिवस</span>
-          </div>
-        </div>
+        <StatCard
+          label="कामाचे दिवस"
+          value={
+            <>
+              {summary.totalWorkingDays}{' '}
+              <span className="text-xs font-normal text-slate-500">दिवस</span>
+            </>
+          }
+        />
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs">
-          <span className="text-xs text-slate-500 block font-medium">
-            एकूण लाभार्थी
-          </span>
-          <div className="text-2xl font-black text-amber-900 mt-1 font-mono">
-            {summary.totalBeneficiaries.toLocaleString('en-IN')}{' '}
-            <span className="text-xs font-normal text-slate-500">विद्यार्थी</span>
-          </div>
-        </div>
+        <StatCard
+          label="एकूण लाभार्थी"
+          variant="amber"
+          value={
+            <>
+              {summary.totalBeneficiaries.toLocaleString('en-IN')}{' '}
+              <span className="text-xs font-normal text-slate-500">विद्यार्थी</span>
+            </>
+          }
+        />
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs">
-          <span className="text-xs text-slate-500 block font-medium">
-            डाळ व कडधान्य वापर
-          </span>
-          <div className="text-2xl font-black text-slate-900 mt-1 font-mono">
-            {summary.totalGrainsPulsesKg.toFixed(2)}{' '}
-            <span className="text-xs font-normal text-slate-500">kg</span>
-          </div>
-        </div>
+        <StatCard
+          label="डाळ व कडधान्य वापर"
+          value={
+            <>
+              {summary.totalGrainsPulsesKg.toFixed(2)}{' '}
+              <span className="text-xs font-normal text-slate-500">kg</span>
+            </>
+          }
+        />
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs">
-          <span className="text-xs text-slate-500 block font-medium">
-            भाजीपाला वापर
-          </span>
-          <div className="text-2xl font-black text-slate-900 mt-1 font-mono">
-            {summary.totalVegetablesKg.toFixed(2)}{' '}
-            <span className="text-xs font-normal text-slate-500">kg</span>
-          </div>
-        </div>
+        <StatCard
+          label="भाजीपाला वापर"
+          value={
+            <>
+              {summary.totalVegetablesKg.toFixed(2)}{' '}
+              <span className="text-xs font-normal text-slate-500">kg</span>
+            </>
+          }
+        />
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs col-span-2 sm:col-span-1">
-          <span className="text-xs text-slate-500 block font-medium">
-            एकूण पाककला खर्च (@ ₹२.३६)
-          </span>
-          <div className="text-2xl font-black text-amber-900 mt-1 font-mono">
-            {formatINR(summary.totalCost)}
-          </div>
-        </div>
+        <StatCard
+          label="एकूण पाककला खर्च (@ ₹२.३६)"
+          variant="amber"
+          className="col-span-2 sm:col-span-1"
+          value={formatINR(summary.totalCost)}
+        />
       </div>
 
       {/* View Switcher Controls (Mobile Segmented Nav & Desktop Options) */}
@@ -912,6 +890,6 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 };

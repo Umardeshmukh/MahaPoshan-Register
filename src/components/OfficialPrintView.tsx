@@ -8,6 +8,7 @@ import {
   getColumnUnitLabel,
   getStockInDisplayUnit,
 } from '../lib/constants';
+import { Button, Badge, MonthPicker } from './ui';
 import {
   Printer,
   ArrowLeft,
@@ -80,22 +81,6 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     }
   }
 
-  // Month options for selector
-  const monthOptions = useMemo(() => {
-    const options = [];
-    const base = new Date();
-    for (let i = -6; i <= 3; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const names = getMonthNames(key);
-      options.push({
-        key,
-        label: `${names.mr} ${names.year} (${names.en})`,
-      });
-    }
-    return options;
-  }, []);
-
   const handleDownloadExcel = () => {
     exportMonthlyRegisterToExcel(selectedMonth, appData);
   };
@@ -107,20 +92,20 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
         <div className="max-w-[1400px] mx-auto flex flex-wrap items-center justify-between gap-3">
           {/* Back button and title */}
           <div className="flex items-center gap-3">
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={onClose}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              leftIcon={<ArrowLeft className="w-4 h-4" />}
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>मागे जा (Back)</span>
-            </button>
+              मागे जा (Back)
+            </Button>
 
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md">
+                <Badge variant="warning" size="md">
                   शासकीय नमुना: भाग - २
-                </span>
+                </Badge>
                 <span className="text-xs text-slate-500 font-mono hidden sm:inline">
                   (धान्यादी मालाचे हिशोब)
                 </span>
@@ -130,44 +115,37 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
 
           {/* Month Selector and Download Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <select
-                id="report-month-select"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
-              >
-                {monthOptions.map((opt) => (
-                  <option key={opt.key} value={opt.key}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MonthPicker
+              id="report-month-select"
+              value={selectedMonth}
+              onChange={setSelectedMonth}
+              showIcon={false}
+              className="w-auto"
+            />
 
             {/* Direct Excel (XLS) Download Button */}
-            <button
+            <Button
               id="download-report-xls-btn"
-              type="button"
+              variant="emerald"
+              size="sm"
               onClick={handleDownloadExcel}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              leftIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
               title="Download official register in Excel .xlsx format"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Excel डाऊनलोड (.xlsx)</span>
-            </button>
+              Excel डाऊनलोड (.xlsx)
+            </Button>
 
             {/* Native Browser Print Button (Save as PDF) */}
-            <button
+            <Button
               id="browser-print-btn"
-              type="button"
+              variant="primary"
+              size="sm"
               onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              leftIcon={<Printer className="w-3.5 h-3.5" />}
               title="Print on Physical Printer or Save as PDF"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>प्रिंट काढा (Print / Save as PDF)</span>
-            </button>
+              प्रिंट काढा (Print / PDF)
+            </Button>
           </div>
         </div>
       </div>

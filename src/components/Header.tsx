@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Show, SignInButton, UserButton } from '@clerk/react';
 import { SyncStatus } from '../lib/cloud-sync';
+import { Badge } from './ui';
 
 
 interface HeaderProps {
@@ -225,17 +226,13 @@ export const Header: React.FC<HeaderProps> = ({
                   )}
 
                   {!isSuperAdmin && typeof daysRemaining === 'number' && (
-                    <span
-                      className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                        daysRemaining > 30
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : daysRemaining > 7
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-rose-50 text-rose-700 border-rose-200'
-                      }`}
+                    <Badge
+                      variant={daysRemaining > 30 ? 'success' : daysRemaining > 7 ? 'warning' : 'danger'}
+                      size="sm"
+                      className="hidden sm:inline-flex"
                     >
                       सदस्यत्व: {daysRemaining} दिवस
-                    </span>
+                    </Badge>
                   )}
 
                   {onOpenReferral && (

@@ -11,6 +11,9 @@ import {
   formatINR,
   formatDateIndian,
 } from '../lib/mdm-calculator';
+import { Button, Badge } from './ui';
+import { PageContainer } from './layout/PageContainer';
+import { DailyIngredientsTable } from './features/daily/DailyIngredientsTable';
 import {
   Calendar,
   Users,
@@ -190,7 +193,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+    <PageContainer>
       {/* Toast Notification */}
       {saveSuccessMsg && (
         <div className="bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-lg flex items-center justify-between gap-3 text-sm font-semibold animate-in fade-in">
@@ -232,9 +235,9 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
               </div>
 
               {existingEntry && (
-                <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-full">
+                <Badge variant="warning" size="sm">
                   नोंद अस्तित्वात आहे
-                </span>
+                </Badge>
               )}
             </div>
 
@@ -681,81 +684,9 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Detailed Items View */}
+                  {/* Detailed Items View using reusable DailyIngredientsTable */}
                   {showDetailedRates && (
-                    <div className="space-y-4 pt-2 animate-in fade-in">
-                      {/* Mobile Card List (Phones: sm:hidden) */}
-                      <div className="block sm:hidden space-y-2">
-                        {calculation.items.map((item) => (
-                          <div
-                            key={item.ingredientId}
-                            className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2 text-xs"
-                          >
-                            <div className="min-w-0">
-                              <span className="font-bold text-slate-900 block truncate">
-                                {item.nameMr}
-                              </span>
-                              <span className="text-[11px] text-slate-500 font-mono">
-                                प्रति वि.: {item.gramsPerStudent} {item.ingredientId === 'purak_aahar' ? 'नग' : item.ingredientId === 'oil' ? 'ml' : 'g'}
-                              </span>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className="font-bold text-amber-950 block font-mono text-sm">
-                                {item.ingredientId === 'purak_aahar'
-                                  ? `${item.totalGrams} नग`
-                                  : `${item.totalKg.toFixed(3)} kg`}
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-mono">
-                                ({item.totalGrams.toLocaleString('en-IN')} {item.ingredientId === 'oil' ? 'ml' : 'g'})
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Desktop Table (Tablets and Desktops: hidden sm:block) */}
-                      <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-2xl">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
-                            <tr>
-                              <th className="py-3 px-4">साहित्य नाव</th>
-                              <th className="py-3 px-4">प्रवर्ग</th>
-                              <th className="py-3 px-4 text-right">प्रति विद्यार्थी प्रमाण</th>
-                              <th className="py-3 px-4 text-right">एकूण ग्रॅम / ml</th>
-                              <th className="py-3 px-4 text-right font-bold text-amber-950 bg-amber-50/70">
-                                एकूण आवश्यक प्रमाण (kg / नग)
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200 font-mono">
-                            {calculation.items.map((item) => (
-                              <tr
-                                key={item.ingredientId}
-                                className="hover:bg-amber-50/30 transition-colors"
-                              >
-                                <td className="py-2.5 px-4 font-sans font-semibold text-slate-900">
-                                  {item.nameMr}
-                                </td>
-                                <td className="py-2.5 px-4 font-sans text-slate-500 text-[11px]">
-                                  {item.category}
-                                </td>
-                                <td className="py-2.5 px-4 text-right">
-                                  {item.gramsPerStudent} {item.ingredientId === 'purak_aahar' ? 'नग' : item.ingredientId === 'oil' ? 'ml' : 'g'}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-semibold">
-                                  {item.totalGrams.toLocaleString('en-IN')} {item.ingredientId === 'oil' ? 'ml' : 'g'}
-                                </td>
-                                <td className="py-2.5 px-4 text-right font-bold text-amber-950 bg-amber-50/50">
-                                  {item.ingredientId === 'purak_aahar'
-                                    ? `${item.totalGrams} नग`
-                                    : `${item.totalKg.toFixed(3)} kg`}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                    <DailyIngredientsTable items={calculation.items} />
                   )}
                 </div>
               )}
@@ -863,6 +794,6 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 };
