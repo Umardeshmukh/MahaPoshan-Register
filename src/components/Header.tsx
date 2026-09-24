@@ -248,15 +248,6 @@ export const Header: React.FC<HeaderProps> = ({
                     </button>
                   )}
 
-                  {!isSuperAdmin && typeof daysRemaining === 'number' && (
-                    <Badge
-                      variant={daysRemaining > 30 ? 'success' : daysRemaining > 7 ? 'warning' : 'danger'}
-                      size="sm"
-                      className="hidden sm:inline-flex"
-                    >
-                      सदस्यत्व: {daysRemaining} दिवस
-                    </Badge>
-                  )}
 
                   {onOpenReferral && (
                     <button
@@ -369,18 +360,6 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Drawer Body */}
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
-              {/* Subscription Status */}
-              {typeof daysRemaining === 'number' && (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-                  <span className="text-slate-600 font-medium">सदस्यत्व वैधता:</span>
-                  <Badge
-                    variant={daysRemaining > 30 ? 'success' : daysRemaining > 7 ? 'warning' : 'danger'}
-                    size="sm"
-                  >
-                    {daysRemaining} दिवस शिल्लक
-                  </Badge>
-                </div>
-              )}
 
               {/* Navigation Items */}
               <div className="space-y-1">

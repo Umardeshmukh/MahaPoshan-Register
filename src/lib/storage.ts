@@ -190,8 +190,18 @@ export function getInitialData(): AppData {
           parsed.ingredients = DEFAULT_INGREDIENTS;
         }
 
-        // Also update recipes to match updated matrix (e.g. soya_vadi: 20g)
-        if (parsed.recipes) {
+        // Automatically migrate to the official 11 dishes if using legacy 6-recipe format
+        const hasLegacyRecipes =
+          !parsed.recipes ||
+          parsed.recipes.length < 11 ||
+          parsed.recipes.some((r: DishRecipe) =>
+            ['mon_masoor', 'tue_moong', 'wed_tur', 'thu_matki', 'fri_chavli', 'sat_soya'].includes(r.id)
+          ) ||
+          !parsed.recipes.some((r: DishRecipe) => r.id === 'veg_pulao');
+
+        if (hasLegacyRecipes) {
+          parsed.recipes = DEFAULT_RECIPES;
+        } else {
           parsed.recipes = parsed.recipes.map((r: DishRecipe) => {
             const defRecipe = DEFAULT_RECIPES.find((d) => d.id === r.id);
             if (defRecipe) {
@@ -199,6 +209,10 @@ export function getInitialData(): AppData {
                 ...r,
                 pulseGrams: defRecipe.pulseGrams,
                 riceGrams: defRecipe.riceGrams,
+                nameMr: defRecipe.nameMr,
+                nameEn: defRecipe.nameEn,
+                pulseIngredientId: defRecipe.pulseIngredientId,
+                customCondiments: defRecipe.customCondiments || r.customCondiments,
               };
             }
             return r;

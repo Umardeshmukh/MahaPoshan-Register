@@ -3,15 +3,127 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>PM POSHAN Daily Register & Stock Inventory</title>
-    <meta name="description" content="Mid-Day Meal (PM POSHAN) daily expenditure register and stock inventory manager (शाळा स्तरवार दैनिक खर्च नोंदवही) for government primary schools in Maharashtra." />
-    <meta property="og:title" content="PM POSHAN Daily Register & Stock Inventory" />
-    <meta property="og:description" content="Mid-Day Meal (PM POSHAN) daily expenditure register and stock inventory manager (शाळा स्तरवार दैनिक खर्च नोंदवही) for government primary schools in Maharashtra." />
+    <title>MahaPoshan Register | शालेय पोषण आहार दैनिक नोंदवही (PM POSHAN)</title>
+    
+    <!-- Primary SEO Metadata -->
+    <meta name="description" content="महाराष्ट्र शासनाच्या प्राथमिक व उच्च प्राथमिक शाळांसाठी PM-POSHAN शालेय पोषण आहार दैनिक खर्च नोंदवही (भाग-२), धान्य व किराणा साठा हिशोब, आणि अधिकृत PDF/Excel अहवाल सॉफ्टवेअर." />
+    <meta name="keywords" content="PM Poshan register, शालेय पोषण आहार नोंदवही, MDM daily register Maharashtra, शाळा स्तरवार दैनिक नोंदवही भाग २, पोषण आहार हिशोब, MDM monthly report excel, PM Poshan app, Mid day meal register Maharashtra" />
+    <meta name="author" content="MahaPoshan Team" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://mahaposhan.in/" />
+
+    <!-- Geo Metadata for Maharashtra Targeting -->
+    <meta name="geo.region" content="IN-MH" />
+    <meta name="geo.placename" content="Maharashtra, India" />
+
+    <!-- Open Graph / Facebook / WhatsApp -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="MahaPoshan Register" />
+    <meta property="og:url" content="https://mahaposhan.in/" />
+    <meta property="og:title" content="MahaPoshan Register | शालेय पोषण आहार दैनिक नोंदवही व साठा व्यवस्थापन" />
+    <meta property="og:description" content="PM-POSHAN दैनिक नोंदवही, धान्य साठा (Stock Register), भाजीपाला/इंधन खर्च व अधिकृत परिशिष्ट-२ (Part-2) अहवाल एका क्लिकवर." />
+    <meta property="og:locale" content="mr_IN" />
+    <meta property="og:locale:alternate" content="en_IN" />
+    <meta property="og:image" content="https://mahaposhan.in/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="MahaPoshan Register Application Dashboard" />
+
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MahaPoshan Register | शालेय पोषण आहार दैनिक नोंदवही" />
+    <meta name="twitter:description" content="PM-POSHAN daily register, grain stock manager & Part-2 certified reports for Maharashtra educators." />
+    <meta name="twitter:image" content="https://mahaposhan.in/og-image.png" />
+
+    <!-- App / PWA Meta -->
+    <meta name="theme-color" content="#047857" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Rozha+One&family=Yantramanav:wght@400;500;700&display=swap" rel="stylesheet" />
+
+    <!-- Structured Data (JSON-LD) for SoftwareApplication & FAQPage -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "@id": "https://mahaposhan.in/#webapp",
+          "name": "MahaPoshan Register",
+          "alternateName": [
+            "शालेय पोषण आहार दैनिक नोंदवही",
+            "PM POSHAN Daily Register & Stock Inventory"
+          ],
+          "url": "https://mahaposhan.in/",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "All (Web, Android, iOS, Windows, macOS)",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "INR"
+          },
+          "description": "Mid-Day Meal (PM POSHAN) daily expenditure register and stock inventory manager (शाळा स्तरवार दैनिक खर्च नोंदवही) for government and aided schools in Maharashtra.",
+          "inLanguage": ["mr", "en"]
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://mahaposhan.in/#organization",
+          "name": "MahaPoshan",
+          "url": "https://mahaposhan.in/",
+          "email": "poshanragister@gmail.com"
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://mahaposhan.in/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is MahaPoshan Register?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "MahaPoshan Register is a specialized software tool designed for elementary and upper primary schools across Maharashtra. It automates daily PM-POSHAN student meal headcount calculations, grain and commodity weights, inventory stock ledgers, and official Government Part-2 booklet reporting."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is MahaPoshan Register for Government-Aided schools or Zilla Parishad schools?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Our primary focus is Government-Aided Private Schools (अनुदानित खाजगी शाळा) and Zilla Parishad/municipal schools in Maharashtra to automate meal calculations, stock ledgers, and certified government reports."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does the application work smoothly on mobile phones and tablets?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes! MahaPoshan Register is built mobile-first. You can record daily meals served, update inward grain supplies, and view reports right from your smartphone or tablet."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I export reports to Excel (.xlsx) and print-ready PDF files?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. With a single tap, you can download color-formatted Excel (.xlsx) sheets and certified landscape A4 PDF documents formatted precisely according to Government Booklet Page 43 (Schedule-II Part-2)."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does it work when the school does not have internet access?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. MahaPoshan Register features an offline-first architecture using browser LocalStorage. You can record daily entries completely offline and sync once connected to the internet."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-amber-100 selection:text-amber-900">
     <div id="root"></div>

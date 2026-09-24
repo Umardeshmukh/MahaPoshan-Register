@@ -82,7 +82,7 @@ export function calculateDayConsumption(
 
   // 3. Daily Fixed Condiments and Vegetables
   const fixedIngredients = allIngredients.filter(
-    (ing) => ing.isFixedDaily && ing.id !== 'rice'
+    (ing) => ing.isFixedDaily && ing.id !== 'rice' && ing.id !== recipe.pulseIngredientId
   );
 
   for (const ing of fixedIngredients) {
@@ -106,6 +106,43 @@ export function calculateDayConsumption(
       ratePerKg: 0,
       cost: 0,
     });
+  }
+
+  // 4. Any custom/supplementary ingredients defined in recipe.customCondiments (e.g. purak_aahar for egg pulao)
+  if (recipe.customCondiments) {
+    const fixedIds = new Set(fixedIngredients.map((f) => f.id));
+    for (const [ingId, qtyPerStudent] of Object.entries(recipe.customCondiments)) {
+      if (
+        ingId !== 'rice' &&
+        ingId !== recipe.pulseIngredientId &&
+        !fixedIds.has(ingId) &&
+        qtyPerStudent > 0
+      ) {
+        const extraIng = allIngredients.find((i) => i.id === ingId);
+        if (extraIng) {
+          const totalGrams = validStudents * qtyPerStudent;
+          const totalKg = extraIng.unit === 'nag' ? totalGrams : Number((totalGrams / 1000).toFixed(4));
+
+          if (extraIng.category === 'pulse' || extraIng.category === 'grain') {
+            totalGrainsPulsesKg += totalKg;
+          } else if (extraIng.category === 'vegetable') {
+            totalVegetablesKg += totalKg;
+          }
+
+          items.push({
+            ingredientId: extraIng.id,
+            nameMr: extraIng.nameMr,
+            nameEn: extraIng.nameEn,
+            category: extraIng.category,
+            gramsPerStudent: qtyPerStudent,
+            totalGrams,
+            totalKg,
+            ratePerKg: 0,
+            cost: 0,
+          });
+        }
+      }
+    }
   }
 
   return {

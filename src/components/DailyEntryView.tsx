@@ -335,9 +335,9 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       onChange={(e) => setSelectedDishId(e.target.value)}
                       className="w-full h-11 sm:h-12 bg-slate-50 border border-slate-300 rounded-xl px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all cursor-pointer"
                     >
-                      {recipes.map((r) => (
+                      {recipes.map((r, idx) => (
                         <option key={r.id} value={r.id}>
-                          {r.dayNameMr}: {r.nameMr}
+                          {idx + 1}. {r.nameMr}
                         </option>
                       ))}
                     </select>
@@ -345,7 +345,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                     <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
                       <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <span className="truncate">
-                        कडधान्य: <strong>{activeRecipe?.nameMr}</strong> ({activeRecipe?.pulseGrams}g) + तांदूळ ({activeRecipe?.riceGrams}g)
+                        घटक: <strong>{activeRecipe?.nameMr}</strong> (तांदूळ {activeRecipe?.riceGrams}g + {ingredients.find((i) => i.id === activeRecipe?.pulseIngredientId)?.nameMr || 'कडधान्य'} {activeRecipe?.pulseGrams}g{activeRecipe?.customCondiments?.purak_aahar ? ` + अंडे ${activeRecipe.customCondiments.purak_aahar} नग` : ''})
                       </span>
                     </p>
                   </div>
@@ -373,7 +373,6 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                         id="student-count-input"
                         type="number"
                         min="0"
-                        max="1000"
                         value={studentCount === 0 ? '' : studentCount}
                         onChange={(e) => {
                           const val = parseInt(e.target.value, 10);
