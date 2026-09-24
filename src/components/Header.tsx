@@ -58,9 +58,10 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
             <span className="truncate">
               {language === 'en'
-                ? 'Govt. of Maharashtra • PM POSHAN'
-                : 'महाराष्ट्र शासन • प्रधानमंत्री पोषण शक्ती निर्माण योजना'}
+                ? 'MDM Nutrition,Accurate Records.'
+                : 'शालेय पोषण, अचूक हिशोब.'}
             </span>
+
           </div>
           <div className="flex items-center gap-3 shrink-0 font-mono text-[11px] text-amber-200">
             {syncStatus === 'syncing' && (
@@ -125,8 +126,8 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setActiveTab('daily')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeTab === 'daily'
-                    ? 'bg-white text-amber-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-amber-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 <CalendarDays className="w-4 h-4 text-amber-700" />
@@ -138,8 +139,8 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setActiveTab('register')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeTab === 'register'
-                    ? 'bg-white text-amber-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-amber-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 <BookOpen className="w-4 h-4 text-amber-700" />
@@ -151,8 +152,8 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setActiveTab('print')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeTab === 'print'
-                    ? 'bg-white text-amber-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-amber-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 <FileText className="w-4 h-4 text-rose-600" />
@@ -164,8 +165,8 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setActiveTab('admin')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeTab === 'admin'
-                    ? 'bg-white text-amber-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-amber-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 <Settings className="w-4 h-4 text-amber-700" />
@@ -180,8 +181,8 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setLanguage('mr')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-xs ${language === 'mr'
-                    ? 'bg-amber-700 text-white font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-amber-700 text-white font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 मराठी
@@ -191,8 +192,8 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setLanguage('dual')}
                 className={`hidden sm:inline-block px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-xs ${language === 'dual'
-                    ? 'bg-amber-700 text-white font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-amber-700 text-white font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 मराठी/EN
@@ -202,8 +203,8 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setLanguage('en')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-xs ${language === 'en'
-                    ? 'bg-amber-700 text-white font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-amber-700 text-white font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 EN
@@ -286,8 +287,8 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={() => setActiveTab('daily')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all cursor-pointer ${activeTab === 'daily'
-              ? 'text-amber-800 bg-amber-50/80 font-bold'
-              : 'text-slate-500 hover:text-slate-900 font-medium'
+            ? 'text-amber-800 bg-amber-50/80 font-bold'
+            : 'text-slate-500 hover:text-slate-900 font-medium'
             }`}
         >
           <CalendarDays className={`w-5 h-5 ${activeTab === 'daily' ? 'text-amber-700' : 'text-slate-400'}`} />
@@ -303,8 +304,8 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={() => setActiveTab('register')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all cursor-pointer ${activeTab === 'register'
-              ? 'text-amber-800 bg-amber-50/80 font-bold'
-              : 'text-slate-500 hover:text-slate-900 font-medium'
+            ? 'text-amber-800 bg-amber-50/80 font-bold'
+            : 'text-slate-500 hover:text-slate-900 font-medium'
             }`}
         >
           <BookOpen className={`w-5 h-5 ${activeTab === 'register' ? 'text-amber-700' : 'text-slate-400'}`} />
@@ -320,8 +321,8 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={() => setActiveTab('print')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all cursor-pointer ${activeTab === 'print'
-              ? 'text-amber-800 bg-amber-50/80 font-bold'
-              : 'text-slate-500 hover:text-slate-900 font-medium'
+            ? 'text-amber-800 bg-amber-50/80 font-bold'
+            : 'text-slate-500 hover:text-slate-900 font-medium'
             }`}
         >
           <FileText className={`w-5 h-5 ${activeTab === 'print' ? 'text-rose-600' : 'text-slate-400'}`} />
@@ -337,8 +338,8 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={() => setActiveTab('admin')}
           className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all cursor-pointer ${activeTab === 'admin'
-              ? 'text-amber-800 bg-amber-50/80 font-bold'
-              : 'text-slate-500 hover:text-slate-900 font-medium'
+            ? 'text-amber-800 bg-amber-50/80 font-bold'
+            : 'text-slate-500 hover:text-slate-900 font-medium'
             }`}
         >
           <Settings className={`w-5 h-5 ${activeTab === 'admin' ? 'text-amber-700' : 'text-slate-400'}`} />

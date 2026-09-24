@@ -167,6 +167,8 @@ export const TEST_BYPASS_APPROVAL_EMAILS: string[] = [
   'abuzar212ai@gmail.com',
 ];
 
+export const SUPER_ADMIN_AUTHORIZED_EMAILS = TEST_BYPASS_APPROVAL_EMAILS;
+
 export function isBypassApprovalEmail(userEmail?: string): boolean {
   if (!userEmail) return false;
   const normalized = userEmail.toLowerCase().trim();

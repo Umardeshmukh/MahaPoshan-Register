@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import {
   UserAccessRequest,
   AdminNotification,
@@ -22,6 +23,7 @@ import {
   sendAdminEmailNotification,
   DEFAULT_SUPER_ADMIN_PASSCODE,
   syncAllRequestsFromCloud,
+  SUPER_ADMIN_AUTHORIZED_EMAILS,
 } from '../lib/subscription-store';
 import {
   getAllReferrals,
@@ -65,6 +67,10 @@ import {
   Save,
   Server,
   Sliders,
+  Download,
+  CheckSquare,
+  Square,
+  MessageCircle,
 } from 'lucide-react';
 
 interface SuperAdminPanelProps {
@@ -76,9 +82,22 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   onExit,
   currentUserEmail,
 }) => {
-  // Authentication & Passcode gate
+  // Check if current user is an authorized Super Admin via Clerk
+  const isClerkSuperAdmin = currentUserEmail
+    ? SUPER_ADMIN_AUTHORIZED_EMAILS.some(
+        (e) => e.toLowerCase().trim() === currentUserEmail.toLowerCase().trim()
+      )
+    : false;
+
+  // Authentication & Passcode gate (Auto-verified if authorized via Clerk)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('pm_poshan_admin_auth') === 'true';
+    if (sessionStorage.getItem('pm_poshan_admin_auth') === 'true') return true;
+    if (currentUserEmail) {
+      return SUPER_ADMIN_AUTHORIZED_EMAILS.some(
+        (e) => e.toLowerCase().trim() === currentUserEmail.toLowerCase().trim()
+      );
+    }
+    return false;
   });
   const [passcode, setPasscode] = useState('');
   const [authError, setAuthError] = useState('');
@@ -89,11 +108,18 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [config, setConfig] = useState(getSuperAdminConfig());
 
-  // UI States
+  // UI & Filter States
   const [activeTab, setActiveTab] = useState<'requests' | 'active' | 'referrals' | 'notifications' | 'settings'>('requests');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [districtFilter, setDistrictFilter] = useState<string>('all');
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+
+  // Batch Operations State
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDuration, setBulkDuration] = useState<number>(6);
+  const [isProcessingBulk, setIsProcessingBulk] = useState<boolean>(false);
+  const [bulkFeedback, setBulkFeedback] = useState<string | null>(null);
 
   // Approval Modal State
   const [selectedRequest, setSelectedRequest] = useState<UserAccessRequest | null>(null);
@@ -410,17 +436,154 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     );
   }
 
-  // Filter requests
-  const filteredRequests = requests.filter((r) => {
-    const matchesSearch =
-      r.schoolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.udiseNumber.includes(searchTerm) ||
-      (r.userName && r.userName.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Available districts extracted dynamically from registered school profiles
+  const availableDistricts = useMemo(() => {
+    const set = new Set<string>();
+    requests.forEach((r) => {
+      if (r.district && r.district.trim()) {
+        set.add(r.district.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'mr'));
+  }, [requests]);
 
-    if (statusFilter === 'all') return matchesSearch;
-    return matchesSearch && r.status === statusFilter;
-  });
+  // Filter requests by search query, status, and district
+  const filteredRequests = useMemo(() => {
+    return requests.filter((r) => {
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        r.schoolName.toLowerCase().includes(q) ||
+        r.userEmail.toLowerCase().includes(q) ||
+        r.udiseNumber.includes(q) ||
+        (r.userName && r.userName.toLowerCase().includes(q)) ||
+        (r.centerCluster && r.centerCluster.toLowerCase().includes(q)) ||
+        (r.district && r.district.toLowerCase().includes(q));
+
+      const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+      const matchesDistrict = districtFilter === 'all' || r.district === districtFilter;
+
+      return matchesSearch && matchesStatus && matchesDistrict;
+    });
+  }, [requests, searchTerm, statusFilter, districtFilter]);
+
+  // Batch Selection Helpers
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filteredRequests.map((r) => r.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  // Bulk Approval Handler
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`आपण निवडलेल्या ${selectedIds.length} शाळांना ${bulkDuration} महिन्यांसाठी मंजूर करू इच्छिता का?`)) return;
+
+    setIsProcessingBulk(true);
+    let successCount = 0;
+    for (const id of selectedIds) {
+      const res = approveAccessRequest(id, bulkDuration);
+      if (res) {
+        successCount++;
+        if (res.userEmail && config.emailAlertsEnabled) {
+          sendApprovalConfirmationEmail({
+            schoolName: res.schoolName,
+            userEmail: res.userEmail,
+            expiresAt: res.expiresAt || '',
+            durationMonths: bulkDuration,
+          }).catch(() => {});
+        }
+      }
+    }
+    setIsProcessingBulk(false);
+    setSelectedIds([]);
+    await loadData();
+    setBulkFeedback(`${successCount} शाळा यशस्वीरित्या मंजूर करण्यात आल्या!`);
+    setTimeout(() => setBulkFeedback(null), 4000);
+  };
+
+  // Bulk Subscription Extension Handler
+  const handleBulkExtend = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`आपण निवडलेल्या ${selectedIds.length} शाळांचा कालावधी +${bulkDuration} महिन्यांनी वाढवू इच्छिता का?`)) return;
+
+    setIsProcessingBulk(true);
+    let successCount = 0;
+    for (const id of selectedIds) {
+      const res = extendSubscription(id, bulkDuration);
+      if (res) successCount++;
+    }
+    setIsProcessingBulk(false);
+    setSelectedIds([]);
+    await loadData();
+    setBulkFeedback(`${successCount} शाळांचा कालावधी +${bulkDuration} महिन्यांनी वाढवण्यात आला!`);
+    setTimeout(() => setBulkFeedback(null), 4000);
+  };
+
+  // Master Directory Excel Export Handler (.xlsx)
+  const handleExportExcel = () => {
+    const listToExport = filteredRequests.length > 0 ? filteredRequests : requests;
+    if (listToExport.length === 0) {
+      alert('कोणत्याही शाळांचा डेटा उपलब्ध नाही.');
+      return;
+    }
+
+    const rows = listToExport.map((req, idx) => {
+      const daysLeft = req.expiresAt
+        ? Math.ceil((new Date(req.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      return {
+        'अ.क्र.': idx + 1,
+        'UDISE क्रमांक': req.udiseNumber,
+        'शाळेचे नाव': req.schoolName,
+        'केंद्र (Cluster)': req.centerCluster || '-',
+        'तालुका (Taluka)': req.taluka || '-',
+        'जिल्हा (District)': req.district || '-',
+        'मुख्याध्यापक / शिक्षक नाव': req.userName || '-',
+        'ईमेल (Email)': req.userEmail,
+        'फोन (Phone)': req.phone || '-',
+        'नोंदणी तारीख': new Date(req.requestedAt).toLocaleDateString('en-IN'),
+        'मुदत संपण्याची तारीख': req.expiresAt ? new Date(req.expiresAt).toLocaleDateString('en-IN') : '-',
+        'स्थिती (Status)': req.status === 'active' ? 'Active' : req.status === 'pending' ? 'Pending' : req.status === 'pending_deletion' ? 'Pending Deletion' : req.status,
+        'उर्वरित दिवस': req.status === 'active' ? (daysLeft > 0 ? daysLeft : 0) : '-',
+        'रेफरल कोड': req.referralCode || '-',
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!cols'] = [
+      { wch: 8 },  // Sr
+      { wch: 14 }, // UDISE
+      { wch: 34 }, // School Name
+      { wch: 18 }, // Cluster
+      { wch: 16 }, // Taluka
+      { wch: 16 }, // District
+      { wch: 24 }, // Teacher
+      { wch: 28 }, // Email
+      { wch: 14 }, // Phone
+      { wch: 16 }, // Registered
+      { wch: 16 }, // Expires
+      { wch: 14 }, // Status
+      { wch: 14 }, // Days Left
+      { wch: 16 }, // Referral
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'School Directory');
+    const todayStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `MahaPoshan_Master_Directory_${todayStr}.xlsx`);
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -439,6 +602,12 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-semibold">
                   DEVELOPER CONSOLE
                 </span>
+                {isClerkSuperAdmin && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                    <span>✓ Clerk Verified</span>
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Subscription approvals, duration controls & user management
@@ -735,6 +904,31 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   <option value="rejected">Rejected</option>
                 </select>
 
+                {/* District Filter Dropdown */}
+                <select
+                  value={districtFilter}
+                  onChange={(e) => setDistrictFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
+                >
+                  <option value="all">All Districts (सर्व जिल्हे)</option>
+                  {availableDistricts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Master Directory Excel Export Button */}
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Download Master Directory as Excel (.xlsx)"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Excel Export</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={loadData}
@@ -747,11 +941,87 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               </div>
             </div>
 
+            {/* Bulk Action Feedback Message */}
+            {bulkFeedback && (
+              <div className="mx-4 mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold animate-in fade-in">
+                {bulkFeedback}
+              </div>
+            )}
+
+            {/* Batch Action Toolbar */}
+            {selectedIds.length > 0 && (
+              <div className="mx-4 mt-3 bg-gradient-to-r from-slate-900 to-amber-950 text-white px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-md border border-amber-500/30 animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="w-4 h-4 text-amber-400" />
+                  <span className="font-bold text-xs">
+                    {selectedIds.length} शाळा निवडल्या आहेत (Selected)
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={bulkDuration}
+                    onChange={(e) => setBulkDuration(Number(e.target.value))}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 text-white text-xs border border-slate-700 focus:outline-hidden"
+                  >
+                    <option value={3}>३ महिने (3 Months)</option>
+                    <option value={6}>६ महिने (6 Months)</option>
+                    <option value={12}>१२ महिने (1 Full Year)</option>
+                    <option value={24}>२४ महिने (2 Years)</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    disabled={isProcessingBulk}
+                    onClick={handleBulkApprove}
+                    className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isProcessingBulk ? 'चालू आहे...' : 'मंजूर करा (Approve)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isProcessingBulk}
+                    onClick={handleBulkExtend}
+                    className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isProcessingBulk ? 'चालू आहे...' : '+कालावधी वाढवा (Extend)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds([])}
+                    className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs transition-colors cursor-pointer"
+                  >
+                    निवड रद्द (Clear)
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <th className="py-3 px-3 w-8 text-center">
+                      <button
+                        type="button"
+                        onClick={toggleSelectAllVisible}
+                        className="p-1 rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                        title={
+                          filteredRequests.length > 0 && filteredRequests.every((r) => selectedIds.includes(r.id))
+                            ? 'Deselect all'
+                            : 'Select all visible'
+                        }
+                      >
+                        {filteredRequests.length > 0 && filteredRequests.every((r) => selectedIds.includes(r.id)) ? (
+                          <CheckSquare className="w-4 h-4 text-amber-700" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-400" />
+                        )}
+                      </button>
+                    </th>
                     <th className="py-3 px-4">School & UDISE</th>
                     <th className="py-3 px-4">Headmaster / Email</th>
                     <th className="py-3 px-4">Cluster & District</th>
@@ -763,7 +1033,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {filteredRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
                         No requests or profiles found.
                       </td>
                     </tr>
@@ -772,6 +1042,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                       const isPending = req.status === 'pending';
                       const isActive = req.status === 'active';
                       const isPendingDeletion = req.status === 'pending_deletion';
+                      const isSelected = selectedIds.includes(req.id);
                       const daysLeft = req.expiresAt
                         ? Math.ceil(
                           (new Date(req.expiresAt).getTime() - new Date().getTime()) /
@@ -791,9 +1062,23 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                       return (
                         <tr
                           key={req.id}
-                          className={`hover:bg-slate-50/80 transition-colors ${isPendingDeletion ? 'bg-rose-50/30' : ''
-                            }`}
+                          className={`hover:bg-slate-50/80 transition-colors ${
+                            isPendingDeletion ? 'bg-rose-50/30' : isSelected ? 'bg-amber-50/40' : ''
+                          }`}
                         >
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleSelect(req.id)}
+                              className="p-1 rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-amber-700" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300 hover:text-slate-400" />
+                              )}
+                            </button>
+                          </td>
                           <td className="py-3 px-4">
                             <div className="font-bold text-slate-900">{req.schoolName}</div>
                             <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
@@ -955,6 +1240,25 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                   </button>
                                 </div>
                               )}
+
+                              {/* WhatsApp Quick Reminder Button */}
+                              <a
+                                href={
+                                  req.phone && req.phone.replace(/\D/g, '').length >= 10
+                                    ? `https://wa.me/91${req.phone.replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(
+                                        `सस्नेह नमस्कार! महापोषण रजिस्टर संदर्भात: आपल्या ${req.schoolName} (UDISE: ${req.udiseNumber}) चे सदस्यत्व ${req.expiresAt ? new Date(req.expiresAt).toLocaleDateString('mr-IN') : 'लवकरच'} संपत आहे. अखंडित सेवेसाठी कृपया नूतनीकरण करा अथवा ॲडमिनशी संपर्क साधा.`
+                                      )}`
+                                    : `https://wa.me/?text=${encodeURIComponent(
+                                        `सस्नेह नमस्कार! महापोषण रजिस्टर संदर्भात: आपल्या ${req.schoolName} (UDISE: ${req.udiseNumber}) चे सदस्यत्व ${req.expiresAt ? new Date(req.expiresAt).toLocaleDateString('mr-IN') : 'लवकरच'} संपत आहे. अखंडित सेवेसाठी कृपया नूतनीकरण करा अथवा ॲडमिनशी संपर्क साधा.`
+                                      )}`
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer flex items-center gap-1"
+                                title="Send WhatsApp Reminder / व्हॉट्सॲप स्मरणपत्र पाठवा"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              </a>
 
                               {/* Delete Profile button (2-step confirmation) */}
                               {!isPendingDeletion && (
