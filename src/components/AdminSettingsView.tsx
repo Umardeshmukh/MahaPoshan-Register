@@ -604,12 +604,12 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200 text-xs sm:text-sm font-medium overflow-x-auto w-full lg:w-auto gap-1">
+        <div className="flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200 text-xs sm:text-sm font-medium overflow-x-auto touch-pan-x scrollbar-none w-full lg:w-auto gap-1">
           <button
             id="tab-btn-general"
             type="button"
             onClick={() => setActiveTab('general')}
-            className={`px-3.5 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            className={`min-h-[42px] px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'general'
                 ? 'bg-white text-amber-900 font-bold shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -623,7 +623,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             id="tab-btn-menu"
             type="button"
             onClick={() => setActiveTab('menu')}
-            className={`px-3.5 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            className={`min-h-[42px] px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'menu'
                 ? 'bg-white text-amber-900 font-bold shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -637,7 +637,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             id="tab-btn-rates"
             type="button"
             onClick={() => setActiveTab('rates')}
-            className={`px-3.5 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            className={`min-h-[42px] px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'rates'
                 ? 'bg-white text-amber-900 font-bold shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -651,7 +651,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             id="tab-btn-config"
             type="button"
             onClick={() => setActiveTab('config')}
-            className={`px-3.5 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            className={`min-h-[42px] px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'config'
                 ? 'bg-white text-amber-900 font-bold shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -1649,8 +1649,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
           {/* Rates Table */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto touch-pan-x">
+              <table className="w-full text-left text-xs border-collapse min-w-[650px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
                     <th className="py-3 px-4 w-12 text-center">स्तंभ क्र.</th>
@@ -2111,8 +2111,8 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
 
       {/* 2-Step User Data Deletion Modal (Asks user 2 times) */}
       {deleteModalType && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-rose-200 text-xs">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-rose-200 text-xs max-h-[calc(100dvh-2rem)] flex flex-col overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">

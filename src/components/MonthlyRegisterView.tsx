@@ -153,62 +153,67 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
   return (
     <PageContainer>
       {/* Top Banner & Action Bar */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-5 sm:p-7 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
-        <div className="space-y-1">
+      <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-7 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 sm:gap-5">
+        <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="warning" size="md">
               शासकीय नमुना भाग - २
             </Badge>
             <span className="text-xs text-slate-500 font-mono">
-              UDISE: {profile.udiseNumber}
+              UDISE: {profile.udiseNumber || 'नोंदणी आवश्यक'}
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+          <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight">
             मासिक खर्च नोंदवही व साठा पत्रक
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-500 truncate">
             {profile.schoolName} • केंद्र: {profile.centerCluster}
           </p>
         </div>
 
         {/* Month Selector & Direct Download Actions */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full lg:w-auto">
           {/* Month selector using MonthPicker primitive */}
           <MonthPicker
             id="month-selector"
             value={selectedMonth}
             onChange={setSelectedMonth}
-            className="flex-1 sm:w-64"
+            className="w-full sm:w-64"
           />
 
-          {/* Excel Export using Button primitive */}
-          <Button
-            id="export-excel-btn"
-            variant="emerald"
-            size="md"
-            onClick={() => exportMonthlyRegisterToExcel(selectedMonth, appData)}
-            leftIcon={<FileSpreadsheet className="w-4 h-4" />}
-            title="Export official ledger to Excel .xlsx"
-          >
-            Excel (.xlsx)
-          </Button>
+          {/* Action buttons: side-by-side on mobile, inline on tablet/desktop */}
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+            {/* Excel Export using Button primitive */}
+            <Button
+              id="export-excel-btn"
+              variant="emerald"
+              size="md"
+              onClick={() => exportMonthlyRegisterToExcel(selectedMonth, appData)}
+              leftIcon={<FileSpreadsheet className="w-4 h-4 shrink-0" />}
+              className="w-full sm:w-auto text-xs sm:text-sm"
+              title="Export official ledger to Excel .xlsx"
+            >
+              Excel (.xlsx)
+            </Button>
 
-          {/* Official Report Print / PDF View using Button primitive */}
-          <Button
-            id="open-official-report-btn"
-            variant="primary"
-            size="md"
-            onClick={() => onOpenPrintView(selectedMonth)}
-            leftIcon={<Printer className="w-4 h-4" />}
-            title="Open Official Government Report Part-2 (Print / Save as PDF)"
-          >
-            शासकीय अहवाल (Print)
-          </Button>
+            {/* Official Report Print / PDF View using Button primitive */}
+            <Button
+              id="open-official-report-btn"
+              variant="primary"
+              size="md"
+              onClick={() => onOpenPrintView(selectedMonth)}
+              leftIcon={<Printer className="w-4 h-4 shrink-0" />}
+              className="w-full sm:w-auto text-xs sm:text-sm"
+              title="Open Official Government Report Part-2 (Print / Save as PDF)"
+            >
+              शासकीय अहवाल
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* KPI Summary Cards using StatCard primitive */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
         <StatCard
           label="कामाचे दिवस"
           value={
@@ -225,13 +230,13 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
           value={
             <>
               {summary.totalBeneficiaries.toLocaleString('en-IN')}{' '}
-              <span className="text-xs font-normal text-slate-500">विद्यार्थी</span>
+              <span className="text-xs font-normal text-slate-500">वि.</span>
             </>
           }
         />
 
         <StatCard
-          label="डाळ व कडधान्य वापर"
+          label="डाळ व कडधान्य"
           value={
             <>
               {summary.totalGrainsPulsesKg.toFixed(2)}{' '}
@@ -251,7 +256,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
         />
 
         <StatCard
-          label="एकूण पाककला खर्च (@ ₹२.३६)"
+          label="एकूण खर्च (@ ₹२.३६)"
           variant="amber"
           className="col-span-2 sm:col-span-1"
           value={formatINR(summary.totalCost)}
@@ -259,46 +264,46 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
       </div>
 
       {/* View Switcher Controls (Mobile Segmented Nav & Desktop Options) */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         {/* Mobile View Switcher (Segmented buttons for Phone) */}
         <div className="flex md:hidden bg-slate-200/80 p-1 rounded-2xl gap-1">
           <button
             type="button"
             onClick={() => setMobileTab('entries')}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[40px] ${
               mobileTab === 'entries'
-                ? 'bg-white text-amber-900 shadow-sm'
+                ? 'bg-white text-amber-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Calendar className="w-4 h-4 text-amber-700" />
-            <span>दैनिक नोंदी ({summary.totalWorkingDays})</span>
+            <Calendar className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <span className="truncate">दैनिक ({summary.totalWorkingDays})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setMobileTab('stock')}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[40px] ${
               mobileTab === 'stock'
-                ? 'bg-white text-amber-900 shadow-sm'
+                ? 'bg-white text-amber-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <PackageCheck className="w-4 h-4 text-amber-700" />
-            <span>साठा पत्रक</span>
+            <PackageCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <span className="truncate">साठा पत्रक</span>
           </button>
 
           <button
             type="button"
             onClick={() => setMobileTab('table')}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[40px] ${
               mobileTab === 'table'
-                ? 'bg-white text-amber-900 shadow-sm'
+                ? 'bg-white text-amber-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Table className="w-4 h-4 text-amber-700" />
-            <span>तक्ता</span>
+            <Table className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <span className="truncate">तक्ता</span>
           </button>
         </div>
 
@@ -370,23 +375,23 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
       {/* MOBILE VIEW 1: Clean Daily Cards for phones (Visible if mobileTab === 'entries' on mobile, or alongside on desktop) */}
       <div className={`space-y-4 ${mobileTab !== 'entries' ? 'hidden md:block' : 'block'}`}>
         <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex items-center justify-between gap-2">
             <div>
-              <h3 className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-amber-700" />
+              <h3 className="font-bold text-slate-900 text-sm sm:text-lg flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-amber-700 shrink-0" />
                 <span>दैनिक नोंदी यादी ({monthInfo.mr} {monthInfo.year})</span>
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                 बदल करण्यासाठी किंवा तपासण्यासाठी कोणत्याही नोंदीवर टॅप करा
               </p>
             </div>
-            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-xl">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl shrink-0">
               {displayedDays.filter((d) => !!d.entry).length} दिवस नोंदवले
             </span>
           </div>
 
           {/* Cards for each recorded day */}
-          <div className="p-4 sm:p-6 space-y-3">
+          <div className="p-3 sm:p-6 space-y-2.5 sm:space-y-3">
             {displayedDays.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-sm">
                 या महिन्यात कोणतीही नोंद आढळली नाही.
@@ -400,15 +405,15 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                   return (
                     <div
                       key={fullDate}
-                      className="p-3.5 sm:p-4 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs text-slate-400"
+                      className="p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs text-slate-400 gap-2"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 font-bold flex items-center justify-center font-mono text-sm">
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        <span className="w-8 h-8 rounded-lg sm:rounded-xl bg-slate-100 text-slate-400 font-bold flex items-center justify-center font-mono text-xs sm:text-sm shrink-0">
                           {dayNumber}
                         </span>
-                        <div>
+                        <div className="min-w-0">
                           <span className="font-semibold text-slate-600">{dayLabel}</span>
-                          <span className="text-slate-400 ml-2">
+                          <span className="text-slate-400 ml-1.5 text-[11px]">
                             {isSunday ? '(रविवार - सुट्टी)' : 'नोंद केलेली नाही'}
                           </span>
                         </div>
@@ -417,7 +422,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onNavigateToDaily(fullDate)}
-                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl transition-colors cursor-pointer"
+                          className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg sm:rounded-xl text-[11px] sm:text-xs transition-colors cursor-pointer shrink-0"
                         >
                           + नोंद करा
                         </button>
@@ -430,34 +435,34 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                   <div
                     key={fullDate}
                     onClick={() => onNavigateToDaily(fullDate)}
-                    className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 hover:border-amber-400 bg-white hover:bg-amber-50/30 transition-all cursor-pointer shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    className="p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-200/90 hover:border-amber-400 bg-white hover:bg-amber-50/30 transition-all cursor-pointer shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3"
                   >
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-900 border border-amber-200 flex flex-col items-center justify-center font-bold text-sm shrink-0">
+                    <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 text-amber-900 border border-amber-200 flex flex-col items-center justify-center font-bold text-xs sm:text-sm shrink-0">
                         <span>{dayNumber}</span>
-                        <span className="text-[10px] font-normal leading-none text-amber-700">
+                        <span className="text-[9px] sm:text-[10px] font-normal leading-none text-amber-700">
                           {dayLabel.slice(0, 3)}
                         </span>
                       </div>
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-slate-900 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <span className="font-bold text-slate-900 text-xs sm:text-sm">
                             {formatDateIndian(fullDate)}
                           </span>
-                          <span className="text-xs text-slate-500 font-medium">({dayLabel})</span>
+                          <span className="text-[11px] sm:text-xs text-slate-500 font-medium">({dayLabel})</span>
                           {entry.isHoliday ? (
-                            <span className="text-[11px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md font-bold">
+                            <span className="text-[10px] bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-md font-bold">
                               सुट्टी
                             </span>
                           ) : (
-                            <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold">
                               {entry.studentCount} विद्यार्थी
                             </span>
                           )}
                         </div>
 
-                        <p className="text-xs text-slate-600 mt-1 truncate">
+                        <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5 truncate">
                           {entry.isHoliday ? (
                             <span>{entry.holidayReason || 'शाळा बंद'}</span>
                           ) : (
@@ -469,17 +474,17 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <div className="text-right">
-                        <span className="text-xs text-slate-400 block font-sans">
+                        <span className="text-[10px] sm:text-xs text-slate-400 block font-sans">
                           खर्च (@ ₹२.३६)
                         </span>
-                        <span className="text-base sm:text-lg font-black text-amber-900 font-mono">
+                        <span className="text-sm sm:text-lg font-black text-amber-900 font-mono">
                           {formatINR(entry.totalCookingCost)}
                         </span>
                       </div>
 
-                      <div className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:text-amber-800 hover:bg-amber-100 transition-colors shrink-0">
+                      <div className="p-2 sm:p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:text-amber-800 hover:bg-amber-100 transition-colors shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center">
                         <Edit3 className="w-4 h-4" />
                       </div>
                     </div>
@@ -494,21 +499,21 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
       {/* MOBILE VIEW 2: Stock Ledger (Opening, Received, Consumed, Closing) */}
       <div className={`space-y-4 ${mobileTab !== 'stock' ? 'hidden md:block' : 'block'}`}>
         <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="p-4 sm:px-6 sm:py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                <PackageCheck className="w-5 h-5 text-amber-700" />
-                <span>साठा पत्रक: मागील शिल्लक, प्राप्त माल व अखेर शिल्लक</span>
+                <PackageCheck className="w-5 h-5 text-amber-700 shrink-0" />
+                <span>साठा पत्रक: शिल्लक व प्राप्त माल</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 मागील शिल्लक (Opening) आणि चालू महिन्यात प्राप्त साहित्य (Received)
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {stockSavedNotice && (
                 <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <span>साठा जतन झाला!</span>
                 </span>
               )}
@@ -517,7 +522,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveStock}
-                  className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-98"
+                  className="min-h-[44px] px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-98"
                 >
                   <Save className="w-4 h-4" />
                   <span>साठा जतन करा (Save)</span>
@@ -526,7 +531,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setStockEditMode(true)}
-                  className="h-11 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[44px] px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 cursor-pointer active:scale-98"
                 >
                   <span>साठा संपादित करा (Edit Stock)</span>
                 </button>
@@ -535,7 +540,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
           </div>
 
           {/* Stock items list on mobile */}
-          <div className="p-4 sm:p-6 block md:hidden space-y-3">
+          <div className="p-3 sm:p-6 block md:hidden space-y-3">
             {ingredients.map((ing) => {
               const itemSummary = summary.itemConsumptions[ing.id] || {
                 totalKg: 0,
@@ -577,13 +582,13 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
               return (
                 <div
                   key={ing.id}
-                  className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3"
+                  className="p-3 sm:p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2.5"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-900 text-sm">
                       {ing.nameMr}
                     </span>
-                    <span className="text-xs text-slate-600 font-mono font-semibold bg-slate-100 px-2 py-0.5 rounded">
+                    <span className="text-[11px] text-slate-600 font-mono font-semibold bg-slate-100 px-2 py-0.5 rounded">
                       {ing.defaultGrams} {ing.unit === 'nag' ? 'नग' : ing.unit === 'ml' ? 'ml' : 'g'}/वि.
                     </span>
                   </div>
@@ -600,7 +605,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                           onChange={(e) =>
                             handleStockInputChange(ing.id, 'openingStockKg', parseFloat(e.target.value) || 0)
                           }
-                          className="w-full mt-1 px-2 py-1 font-mono bg-blue-50 border border-blue-300 rounded text-xs font-bold"
+                          className="w-full mt-1 px-2 min-h-[38px] font-mono bg-blue-50 border border-blue-300 rounded-lg text-sm font-bold touch-manipulation"
                         />
                       ) : (
                         <span className="font-bold font-mono text-slate-800 text-sm mt-0.5 block">
@@ -620,7 +625,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                           onChange={(e) =>
                             handleStockInputChange(ing.id, 'receivedStockKg', parseFloat(e.target.value) || 0)
                           }
-                          className="w-full mt-1 px-2 py-1 font-mono bg-emerald-50 border border-emerald-300 rounded text-xs font-bold"
+                          className="w-full mt-1 px-2 min-h-[38px] font-mono bg-emerald-50 border border-emerald-300 rounded-lg text-sm font-bold touch-manipulation"
                         />
                       ) : (
                         <span className="font-bold font-mono text-slate-800 text-sm mt-0.5 block">
@@ -763,22 +768,22 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
       {/* MOBILE VIEW 3 & Desktop Matrix: Full 20-Column Official Ledger Table */}
       <div className={`space-y-4 ${mobileTab !== 'table' ? 'hidden md:block' : 'block'}`}>
         <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="p-4 sm:px-6 sm:py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                <Table className="w-5 h-5 text-amber-700" />
+                <Table className="w-5 h-5 text-amber-700 shrink-0" />
                 <span>शासकीय नमुना भाग-२ संपूर्ण तक्ता</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 {monthInfo.mr} {monthInfo.year} मधील सर्व दिवसांचा सविस्तर हिशोब
               </p>
             </div>
-            <span className="text-xs text-slate-400 font-medium md:hidden">
+            <span className="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60 font-medium md:hidden self-start">
               तक्ता पाहण्यासाठी डावीकडे/उजवीकडे सरकवा 👉
             </span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-pan-x">
             <table className="w-full text-xs text-left border-collapse min-w-[1100px]">
               <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300 sticky top-0 z-10">
                 <tr>

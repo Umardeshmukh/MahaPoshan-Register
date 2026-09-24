@@ -86,12 +86,12 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
   };
 
   return (
-    <div className="bg-slate-100 min-h-screen text-black pb-12">
+    <div className="bg-slate-100 min-h-screen text-black pb-12 w-full max-w-full overflow-x-hidden">
       {/* Interactive Action Bar (Screen Only, hidden during print or PDF capture) */}
-      <div className="no-print sticky top-0 z-30 bg-white border-b border-slate-300 shadow-xs px-4 py-3">
-        <div className="max-w-[1400px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div className="no-print sticky top-0 z-30 bg-white border-b border-slate-300 shadow-xs px-3 sm:px-4 py-2.5 sm:py-3">
+        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           {/* Back button and title */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-3">
             <Button
               variant="secondary"
               size="sm"
@@ -102,9 +102,9 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
             </Button>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <Badge variant="warning" size="md">
-                  शासकीय नमुना: भाग - २
+                  शासकीय नमुना भाग-२
                 </Badge>
                 <span className="text-xs text-slate-500 font-mono hidden sm:inline">
                   (धान्यादी मालाचे हिशोब)
@@ -120,7 +120,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               value={selectedMonth}
               onChange={setSelectedMonth}
               showIcon={false}
-              className="w-auto"
+              className="flex-1 sm:flex-none"
             />
 
             {/* Direct Excel (XLS) Download Button */}
@@ -131,8 +131,9 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               onClick={handleDownloadExcel}
               leftIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
               title="Download official register in Excel .xlsx format"
+              className="flex-1 sm:flex-none"
             >
-              Excel डाऊनलोड (.xlsx)
+              <span className="hidden xs:inline">Excel</span> डाऊनलोड
             </Button>
 
             {/* Native Browser Print Button (Save as PDF) */}
@@ -143,18 +144,19 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               onClick={() => window.print()}
               leftIcon={<Printer className="w-3.5 h-3.5" />}
               title="Print on Physical Printer or Save as PDF"
+              className="flex-1 sm:flex-none"
             >
-              प्रिंट काढा (Print / PDF)
+              प्रिंट (Print)
             </Button>
           </div>
         </div>
       </div>
 
       {/* Official Government Booklet Container (Matches the attached document page 43) */}
-      <div className="max-w-[1400px] mx-auto p-2 sm:p-6">
+      <div className="max-w-[1400px] mx-auto p-2 sm:p-6 w-full overflow-hidden">
         <div
           id="official-register-document"
-          className="bg-white border-2 border-black p-4 sm:p-6 shadow-md text-black font-sans print:shadow-none print:p-0 print:border-none"
+          className="bg-white border-2 border-black p-3 sm:p-6 shadow-md text-black font-sans print:shadow-none print:p-0 print:border-none"
         >
           {/* Top Page Number & Title Header */}
           <div className="relative mb-2">
@@ -163,7 +165,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               ४३
             </div>
 
-            <div className="text-center pt-1">
+            <div className="text-center pt-1 pr-10 pl-2">
               <h1 className="text-sm sm:text-base md:text-lg font-black tracking-tight leading-snug">
                 प्रधानमंत्री पोषणशक्ती निर्माण योजना (इ. १ ली ते ५ वी)
               </h1>
@@ -174,31 +176,36 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
           </div>
 
           {/* School Name, Center, Month, and Unit Header Row */}
-          <div className="flex flex-wrap items-center justify-between text-xs sm:text-sm font-semibold border-b border-black pb-2 mb-2 gap-2">
-            <div className="flex-1 min-w-[240px]">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between text-xs sm:text-sm font-semibold border-b border-black pb-2 mb-2 gap-1.5 sm:gap-2">
+            <div className="min-w-0">
               <span>शाळेचे नाव :-- </span>
               <span className="font-bold underline">{profile.schoolName}</span>
             </div>
-            <div className="min-w-[160px]">
+            <div className="min-w-0">
               <span>केंद्र :-- </span>
               <span className="font-bold underline">{profile.centerCluster}</span>
             </div>
-            <div className="min-w-[160px]">
+            <div className="min-w-0">
               <span>महिना :-- </span>
               <span className="font-bold underline">
                 {monthInfo.mr} {monthInfo.year}
               </span>
             </div>
-            <div className="text-right font-bold text-xs text-slate-800">
+            <div className="text-left sm:text-right font-bold text-xs text-slate-800">
               <span className="bg-amber-50 border border-slate-300 px-2 py-0.5 rounded text-[10px] sm:text-xs">
                 डाळी/कडधान्ये: <strong>कि.ग्रॅ.</strong> | मसाले/मीठ: <strong>ग्रॅम</strong> | पूरक आहार: <strong>नग</strong>
               </span>
             </div>
           </div>
 
+          {/* Mobile Swipe Hint */}
+          <div className="no-print text-xs text-amber-800 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200/60 font-medium md:hidden mb-2 text-center">
+            तक्ता पाहण्यासाठी डावीकडे/उजवीकडे सरकवा (Swipe horizontally) 👉
+          </div>
+
           {/* The 24-Column Official Government Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-[9px] sm:text-[10px] official-table border-collapse border border-black text-center font-mono">
+          <div className="overflow-x-auto touch-pan-x -mx-1 sm:mx-0">
+            <table className="w-full text-[9px] sm:text-[10px] official-table border-collapse border border-black text-center font-mono min-w-[1050px] print:min-w-0">
               <thead>
                 {/* Row 1: Header Titles with Units */}
                 <tr className="bg-slate-100 font-bold border-b border-black text-black">
@@ -534,7 +541,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
           </div>
 
           {/* Official Signatures Grid (Cook, MDM Incharge, Headmaster, Inspection Officer) */}
-          <div className="grid grid-cols-4 gap-4 text-center mt-6 pt-2 text-xs font-semibold">
+          <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3 sm:gap-4 text-center mt-6 pt-2 text-xs font-semibold">
             <div className="border-t border-black pt-1">
               <div>स्वयंपाकी / मदतनीस स्वाक्षरी</div>
               <div className="text-[10px] text-slate-600 mt-0.5">({profile.cookName || 'नाव व सही'})</div>

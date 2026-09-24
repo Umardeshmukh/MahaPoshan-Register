@@ -42,7 +42,7 @@ export const MonthPicker: React.FC<MonthPickerProps> = ({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full bg-slate-50 border border-slate-300 rounded-xl py-2 text-xs sm:text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer ${
+        className={`w-full min-h-[44px] bg-slate-50 border border-slate-300 rounded-xl py-2 text-xs sm:text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer ${
           showIcon ? 'pl-9 pr-8' : 'px-3'
         }`}
       >

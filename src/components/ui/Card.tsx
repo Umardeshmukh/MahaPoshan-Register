@@ -33,7 +33,7 @@ export const CardHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   ...props
 }) => (
   <div
-    className={`p-5 sm:p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 ${className}`}
+    className={`p-4 sm:p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5 ${className}`}
     {...props}
   >
     {children}
@@ -65,7 +65,7 @@ export const CardContent: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className = '',
   ...props
 }) => (
-  <div className={`p-5 sm:p-6 ${className}`} {...props}>
+  <div className={`p-3.5 sm:p-6 ${className}`} {...props}>
     {children}
   </div>
 );
@@ -76,7 +76,7 @@ export const CardFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   ...props
 }) => (
   <div
-    className={`p-4 sm:p-6 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl sm:rounded-b-3xl ${className}`}
+    className={`p-3.5 sm:p-6 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl sm:rounded-b-3xl ${className}`}
     {...props}
   >
     {children}

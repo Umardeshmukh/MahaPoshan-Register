@@ -46,17 +46,17 @@ export const StatCard: React.FC<StatCardProps> = ({
 
   return (
     <div
-      className={`p-4 sm:p-5 rounded-2xl border transition-all shadow-xs ${styles.container} ${className}`}
+      className={`p-3.5 sm:p-5 rounded-2xl border transition-all shadow-xs ${styles.container} ${className}`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="text-[11px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider block truncate" title={label}>
           {label}
         </span>
         {badge}
       </div>
 
-      <div className="mt-2.5 flex items-baseline justify-between gap-2">
-        <span className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${styles.value}`}>
+      <div className="mt-2 sm:mt-2.5 flex items-baseline justify-between gap-1.5 min-w-0">
+        <span className={`text-lg sm:text-2xl font-black font-mono tracking-tight truncate ${styles.value}`}>
           {value}
         </span>
         {icon && (

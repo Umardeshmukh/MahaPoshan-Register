@@ -221,27 +221,27 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
             className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden"
           >
             {/* Card Header with Breathing Room */}
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex items-center justify-between gap-2">
               <div>
                 <h2 className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                  <Utensils className="w-5 h-5 text-amber-700" />
+                  <Utensils className="w-5 h-5 text-amber-700 shrink-0" />
                   <span>
                     {language === 'en' ? 'Daily Register Entry' : 'दैनिक पोषण आहार नोंद'}
                   </span>
                 </h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 mt-0.5">
                   उपस्थित विद्यार्थी संख्या व मेन्यू निवडा
                 </p>
               </div>
 
               {existingEntry && (
-                <Badge variant="warning" size="sm">
+                <Badge variant="warning" size="sm" className="shrink-0">
                   नोंद अस्तित्वात आहे
                 </Badge>
               )}
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               {/* 1. Date Picker & Day Badge */}
               <div className="space-y-2">
                 <label
@@ -256,15 +256,15 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full h-12 bg-slate-50 border border-slate-300 rounded-xl px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all cursor-pointer"
+                    className="w-full h-11 sm:h-12 bg-slate-50 border border-slate-300 rounded-xl px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all cursor-pointer"
                     required
                   />
-                  <div className="h-12 bg-amber-50 border border-amber-200/90 rounded-xl px-4 flex items-center justify-center text-center">
+                  <div className="h-11 sm:h-12 bg-amber-50 border border-amber-200/90 rounded-xl px-3 sm:px-4 flex items-center justify-center text-center">
                     <div>
                       <span className="block text-xs font-bold text-amber-900">
                         {dayInfo.dayNameMr}
                       </span>
-                      <span className="block text-[11px] text-amber-700 font-medium">
+                      <span className="block text-[10px] sm:text-[11px] text-amber-700 font-medium">
                         {dayInfo.dayNameEn}
                       </span>
                     </div>
@@ -273,14 +273,14 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
               </div>
 
               {/* Holiday Checkbox */}
-              <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
                   <input
                     id="is-holiday-check"
                     type="checkbox"
                     checked={isHoliday}
                     onChange={(e) => setIsHoliday(e.target.checked)}
-                    className="w-5 h-5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                    className="w-5 h-5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer shrink-0"
                   />
                   <label
                     htmlFor="is-holiday-check"
@@ -290,7 +290,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                   </label>
                 </div>
                 {isHoliday && (
-                  <span className="text-[10px] font-bold uppercase bg-rose-100 text-rose-800 px-2 py-0.5 rounded">
+                  <span className="text-[10px] font-bold uppercase bg-rose-100 text-rose-800 px-2 py-0.5 rounded shrink-0">
                     सुट्टी
                   </span>
                 )}
@@ -310,21 +310,21 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                     value={holidayReason}
                     onChange={(e) => setHolidayReason(e.target.value)}
                     placeholder="उदा. रविवार, स्थानिक सुट्टी, सण..."
-                    className="w-full h-12 bg-slate-50 border border-slate-300 rounded-xl px-4 text-sm text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    className="w-full h-11 sm:h-12 bg-slate-50 border border-slate-300 rounded-xl px-4 text-xs sm:text-sm text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
               ) : (
                 <>
                   {/* 2. Menu Dish Selector */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-1">
                       <label
                         htmlFor="dish-select"
                         className="block text-xs font-bold text-slate-700 uppercase tracking-wider"
                       >
                         २. मेन्यू आहार प्रकार (Dish / Menu)
                       </label>
-                      <span className="text-[11px] text-amber-800 font-semibold">
+                      <span className="text-[10px] sm:text-[11px] text-amber-800 font-semibold truncate">
                         वारानुसार चक्राकार मेन्यू
                       </span>
                     </div>
@@ -333,7 +333,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       id="dish-select"
                       value={selectedDishId}
                       onChange={(e) => setSelectedDishId(e.target.value)}
-                      className="w-full h-12 bg-slate-50 border border-slate-300 rounded-xl px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all cursor-pointer"
+                      className="w-full h-11 sm:h-12 bg-slate-50 border border-slate-300 rounded-xl px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all cursor-pointer"
                     >
                       {recipes.map((r) => (
                         <option key={r.id} value={r.id}>
@@ -344,14 +344,14 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
 
                     <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
                       <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>
+                      <span className="truncate">
                         कडधान्य: <strong>{activeRecipe?.nameMr}</strong> ({activeRecipe?.pulseGrams}g) + तांदूळ ({activeRecipe?.riceGrams}g)
                       </span>
                     </p>
                   </div>
 
                   {/* 3. Beneficiary Student Count - Mobile Centric Big Stepper */}
-                  <div className="space-y-3 pt-2">
+                  <div className="space-y-2.5 pt-1">
                     <div className="flex items-center justify-between">
                       <label
                         htmlFor="student-count-input"
@@ -366,8 +366,8 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
 
                     {/* Numeric Display & Direct Input */}
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                        <Users className="w-6 h-6 text-amber-600" />
+                      <div className="absolute inset-y-0 left-0 pl-3.5 sm:pl-4 flex items-center pointer-events-none text-slate-400">
+                        <Users className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
                       </div>
                       <input
                         id="student-count-input"
@@ -380,18 +380,18 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                           setStudentCount(isNaN(val) ? 0 : Math.max(0, val));
                         }}
                         placeholder="0"
-                        className="w-full h-16 bg-slate-50 border-2 border-amber-300 rounded-2xl pl-14 pr-16 text-3xl font-black text-slate-900 tracking-tight focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-600 transition-all"
+                        className="w-full h-14 sm:h-16 bg-slate-50 border-2 border-amber-300 rounded-2xl pl-12 sm:pl-14 pr-16 sm:pr-20 text-2xl sm:text-3xl font-black text-slate-900 tracking-tight focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-600 transition-all"
                         required
                       />
-                      <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                      <div className="absolute inset-y-0 right-0 pr-3.5 sm:pr-4 flex items-center pointer-events-none">
                         <span className="text-xs font-bold text-slate-400">
                           विद्यार्थी
                         </span>
                       </div>
                     </div>
 
-                    {/* Thumb-friendly Mobile Stepper Buttons with 44px+ height */}
-                    <div className="grid grid-cols-5 gap-2 pt-1">
+                    {/* Thumb-friendly Mobile Stepper Buttons with 44px+ touch height */}
+                    <div className="grid grid-cols-5 gap-1.5 sm:gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => adjustStudents(-10)}
@@ -493,66 +493,66 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
         <div className="lg:col-span-7 space-y-6">
           <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden">
             {/* Header with Dark Luxury Contrast */}
-            <div className="bg-slate-900 text-white p-5 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div className="bg-slate-900 text-white p-4 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 sm:mb-4">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <h3 className="font-bold text-base sm:text-lg text-white">
+                  <h3 className="font-bold text-sm sm:text-lg text-white">
                     {language === 'en'
                       ? 'Live Consumption & Cost'
                       : 'दैनिक लागणारा एकूण शिधा व साहित्य मोजदाद'}
                   </h3>
                 </div>
-                <span className="text-xs bg-slate-800 text-amber-300 font-mono px-3 py-1 rounded-lg border border-slate-700">
+                <span className="text-xs bg-slate-800 text-amber-300 font-mono px-2.5 py-1 rounded-lg border border-slate-700">
                   {formatDateIndian(selectedDate)} • {dayInfo.dayNameMr}
                 </span>
               </div>
 
               {/* 3 Prominent Physical Metric Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                 {/* 1. Pulses / Grains */}
-                <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4">
+                <div className="bg-slate-800/90 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-4">
                   <span className="text-[11px] text-slate-400 block font-medium">
                     एकूण डाळ व धान्य
                   </span>
                   <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl sm:text-3xl font-black text-white font-mono">
+                    <span className="text-xl sm:text-3xl font-black text-white font-mono">
                       {calculation.totalGrainsPulsesKg.toFixed(3)}
                     </span>
                     <span className="text-xs font-bold text-amber-400">kg</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 block mt-1">
+                  <span className="text-[10px] text-slate-400 block mt-1 truncate">
                     तांदूळ + {activeRecipe?.nameMr}
                   </span>
                 </div>
 
                 {/* 2. Total Vegetables */}
-                <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4">
+                <div className="bg-slate-800/90 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-4">
                   <span className="text-[11px] text-slate-400 block font-medium">
                     एकूण भाजीपाला
                   </span>
                   <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl sm:text-3xl font-black text-white font-mono">
+                    <span className="text-xl sm:text-3xl font-black text-white font-mono">
                       {calculation.totalVegetablesKg.toFixed(3)}
                     </span>
                     <span className="text-xs font-bold text-emerald-400">kg</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 block mt-1">
+                  <span className="text-[10px] text-slate-400 block mt-1 truncate">
                     भाजीपाला (५०g) + वाटाणा (२०g)
                   </span>
                 </div>
 
                 {/* 3. Constant Cooking Cost (@ ₹2.36/student) */}
-                <div className="bg-amber-950/80 border border-amber-700/60 rounded-2xl p-4">
+                <div className="bg-amber-950/80 border border-amber-700/60 rounded-xl sm:rounded-2xl p-3.5 sm:p-4">
                   <span className="text-[11px] text-amber-300 block font-medium">
                     एकूण पाककला खर्च (@ ₹२.३६/वि.)
                   </span>
                   <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl sm:text-3xl font-black text-amber-300 font-mono">
+                    <span className="text-xl sm:text-3xl font-black text-amber-300 font-mono">
                       {formatINR(calculation.totalCookingCost)}
                     </span>
                   </div>
-                  <span className="text-[10px] text-amber-200/80 block mt-1">
+                  <span className="text-[10px] text-amber-200/80 block mt-1 truncate">
                     {studentCount} विद्यार्थी × ₹२.३६ (निश्चित दर)
                   </span>
                 </div>
@@ -560,7 +560,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
             </div>
 
             {/* Content Area */}
-            <div className="p-5 sm:p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               {isHoliday ? (
                 <div className="py-12 text-center text-slate-500">
                   <Coffee className="w-12 h-12 mx-auto text-slate-300 mb-3" />
@@ -580,26 +580,26 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-5 sm:space-y-6">
                   {/* Essential Daily Rations Grid */}
                   <div>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2.5">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                        स्वयंपाकासाठी लागणारा मुख्य शिधा (Essential Rations):
+                        स्वयंपाकासाठी मुख्य शिधा (Essential Rations):
                       </h4>
                       <span className="text-[11px] font-semibold text-slate-500">
                         {studentCount} विद्यार्थी
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                       {/* Rice */}
-                      <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 uppercase">
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col justify-between">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase truncate">
                           तांदूळ (Rice)
                         </span>
-                        <div className="my-2">
-                          <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                        <div className="my-1.5 sm:my-2">
+                          <span className="text-lg sm:text-2xl font-black text-slate-900 font-mono">
                             {((studentCount * (activeRecipe?.riceGrams ?? 100)) / 1000).toFixed(3)}
                           </span>
                           <span className="text-xs font-bold text-amber-700 ml-1">kg</span>
@@ -610,12 +610,12 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       </div>
 
                       {/* Pulse */}
-                      <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between">
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col justify-between">
                         <span className="text-[11px] font-bold text-slate-600 uppercase truncate">
                           {activeRecipe?.nameMr}
                         </span>
-                        <div className="my-2">
-                          <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                        <div className="my-1.5 sm:my-2">
+                          <span className="text-lg sm:text-2xl font-black text-slate-900 font-mono">
                             {((studentCount * (activeRecipe?.pulseGrams ?? 20)) / 1000).toFixed(3)}
                           </span>
                           <span className="text-xs font-bold text-amber-700 ml-1">kg</span>
@@ -626,12 +626,12 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       </div>
 
                       {/* Oil */}
-                      <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 uppercase">
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col justify-between">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase truncate">
                           खाद्यतेल (Oil)
                         </span>
-                        <div className="my-2">
-                          <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                        <div className="my-1.5 sm:my-2">
+                          <span className="text-lg sm:text-2xl font-black text-slate-900 font-mono">
                             {((studentCount * 5) / 1000).toFixed(3)}
                           </span>
                           <span className="text-xs font-bold text-amber-700 ml-1">kg</span>
@@ -642,12 +642,12 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       </div>
 
                       {/* Vegetables */}
-                      <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 uppercase">
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col justify-between">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase truncate">
                           भाजीपाला (Veg)
                         </span>
-                        <div className="my-2">
-                          <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                        <div className="my-1.5 sm:my-2">
+                          <span className="text-lg sm:text-2xl font-black text-slate-900 font-mono">
                             {calculation.totalVegetablesKg.toFixed(3)}
                           </span>
                           <span className="text-xs font-bold text-emerald-700 ml-1">kg</span>
@@ -694,18 +694,18 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
           </div>
 
           {/* Recent Entries */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-amber-700" />
-                <span>अलीकडील जतन नोंदी (Recent Entries)</span>
+          <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
+              <h3 className="font-bold text-xs sm:text-base text-slate-900 flex items-center gap-1.5 sm:gap-2 truncate">
+                <Calendar className="w-4 h-4 text-amber-700 shrink-0" />
+                <span className="truncate">अलीकडील जतन नोंदी (Recent Entries)</span>
               </h3>
               <button
                 type="button"
                 onClick={onNavigateToRegister}
-                className="text-xs text-amber-800 hover:text-amber-950 font-bold flex items-center gap-1 cursor-pointer"
+                className="text-xs text-amber-800 hover:text-amber-950 font-bold flex items-center gap-1 cursor-pointer shrink-0"
               >
-                <span>सर्व नोंदी पहा</span>
+                <span>सर्व नोंदी</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -719,33 +719,33 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                 {recentEntries.map((item) => (
                   <div
                     key={item.id}
-                    className="py-3 flex items-center justify-between gap-3 text-xs hover:bg-slate-50/80 px-2 rounded-xl transition-colors"
+                    className="py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-3 text-xs hover:bg-slate-50/80 px-1 sm:px-2 rounded-xl transition-colors"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 flex flex-col items-center justify-center font-bold text-xs shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 flex flex-col items-center justify-center font-bold text-xs shrink-0">
                         <span>{item.date.split('-')[2]}</span>
-                        <span className="text-[9px] font-normal leading-none text-amber-700">
+                        <span className="text-[8px] sm:text-[9px] font-normal leading-none text-amber-700">
                           {item.dayNameMr.slice(0, 2)}
                         </span>
                       </div>
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-900 flex items-center gap-1.5 truncate">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-900 flex items-center gap-1 sm:gap-1.5 truncate">
                           <span>{formatDateIndian(item.date)}</span>
-                          <span className="text-slate-400 font-normal">({item.dayNameMr})</span>
+                          <span className="text-slate-400 font-normal text-[11px]">({item.dayNameMr})</span>
                           {item.isHoliday && (
-                            <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-bold">
+                            <span className="text-[9px] sm:text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-bold shrink-0">
                               सुट्टी
                             </span>
                           )}
                         </div>
-                        <p className="text-slate-500 text-[11px] mt-0.5 truncate">
+                        <p className="text-slate-500 text-[10px] sm:text-[11px] mt-0.5 truncate">
                           {item.isHoliday ? (
                             <span>{item.holidayReason || 'सुट्टी'}</span>
                           ) : (
                             <span>
                               {item.dishNameMr} • <strong>{item.studentCount}</strong> वि. • {item.totalGrainsPulsesKg.toFixed(3)} kg •{' '}
                               <span className="text-amber-800 font-bold">
-                                {formatINR(item.totalCookingCost)} (@ ₹२.३६)
+                                {formatINR(item.totalCookingCost)}
                               </span>
                             </span>
                           )}
@@ -753,11 +753,11 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
                       <button
                         type="button"
                         onClick={() => setSelectedDate(item.date)}
-                        className="p-2 text-slate-500 hover:text-amber-800 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
+                        className="p-1.5 sm:p-2 text-slate-500 hover:text-amber-800 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer min-w-[34px] min-h-[34px] flex items-center justify-center"
                         title="Edit entry"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -781,7 +781,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                             onDeleteEntry(item.date);
                           }
                         }}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                        className="p-1.5 sm:p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer min-w-[34px] min-h-[34px] flex items-center justify-center"
                         title="Delete entry"
                       >
                         <Trash2 className="w-4 h-4" />

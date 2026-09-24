@@ -135,7 +135,7 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
       )}
 
       {/* Top Banner Header */}
-      <div className="p-6 sm:p-8 relative z-10">
+      <div className="p-4 sm:p-8 relative z-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-semibold backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
@@ -158,7 +158,7 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
         </p>
 
         {/* Unique Referral Code Box */}
-        <div className="mt-6 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="mt-5 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3.5 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3.5">
           <div className="text-center sm:text-left">
             <span className="text-[11px] uppercase tracking-wider text-amber-200 font-semibold block">
               आपला युनिक रेफरल कोड (Your Referral Code)
@@ -172,7 +172,7 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
             <button
               type="button"
               onClick={handleCopyCode}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
             >
               {copiedCode ? (
                 <>
@@ -190,7 +190,7 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
             <button
               type="button"
               onClick={handleWhatsAppShare}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-900/30 transition-all active:scale-95 cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-900/30 transition-all active:scale-95 cursor-pointer"
             >
               <Share2 className="w-4 h-4" />
               <span>WhatsApp वर पाठवा</span>

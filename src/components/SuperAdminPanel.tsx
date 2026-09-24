@@ -1000,8 +1000,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             )}
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto touch-pan-x">
+              <table className="w-full text-left text-xs border-collapse min-w-[720px]">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <th className="py-3 px-3 w-8 text-center">
@@ -1348,8 +1348,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 </button>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="overflow-x-auto touch-pan-x">
+                <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                       <th className="py-3 px-4">Referrer Teacher</th>
@@ -1490,8 +1490,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
       {/* Manual Reward Payout Modal */}
       {selectedReferralForPayout && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-xs">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 text-xs max-h-[calc(100dvh-2rem)] flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-amber-600" />
@@ -1858,8 +1858,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
       {/* Approval Duration Modal */}
       {showApprovalModal && selectedRequest && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-xs">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 text-xs max-h-[calc(100dvh-2rem)] flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -1947,8 +1947,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
       {/* 2-Step Password-Protected Account Deletion Modal */}
       {deleteModalRequest && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-rose-200 text-xs">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-rose-200 text-xs max-h-[calc(100dvh-2rem)] flex flex-col overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
@@ -2163,8 +2163,8 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
       {/* Immediate Permanent Purge Modal (Bypasses 28-day waiting, Passcode Protected) */}
       {purgeModalRequest && (
-        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-300 text-xs">
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-rose-300 text-xs max-h-[calc(100dvh-2rem)] flex flex-col overflow-y-auto">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-200 text-rose-800">
               <AlertTriangle className="w-5 h-5 text-rose-600" />
               <h3 className="text-sm font-bold text-slate-900">

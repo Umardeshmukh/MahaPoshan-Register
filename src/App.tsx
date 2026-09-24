@@ -512,9 +512,9 @@ export default function App() {
 
       {/* Footer with 4 Mandatory Legal Links */}
       {activeTab !== 'print' && (
-        <footer className="no-print hidden md:block bg-white border-t border-slate-200/80 py-4 px-4 text-xs text-slate-500">
+        <footer className="no-print block bg-white border-t border-slate-200/80 py-4 px-3 sm:px-4 pb-24 md:pb-4 text-xs text-slate-500">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div>
+            <div className="text-center sm:text-left">
               <p className="font-medium text-slate-700">
                 महाराष्ट्र शासन • शालेय पोषण आहार योजना (PM POSHAN) • शाळा स्तरवार दैनिक खर्च नोंदवही
               </p>
@@ -524,7 +524,7 @@ export default function App() {
             </div>
 
             {/* Legal Documents Links */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-3 gap-y-1.5 text-[11px]">
               <button
                 type="button"
                 onClick={() => handleOpenLegal('terms')}
@@ -562,8 +562,8 @@ export default function App() {
                 className="text-amber-800 hover:text-amber-950 font-bold hover:underline inline-flex items-center gap-1"
                 title="अधिकृत संपर्क ईमेल"
               >
-                <Mail className="w-3 h-3 text-amber-700" />
-                <span>Contact Us: poshanragister@gmail.com</span>
+                <Mail className="w-3 h-3 text-amber-700 shrink-0" />
+                <span className="break-all">poshanragister@gmail.com</span>
               </a>
             </div>
           </div>
