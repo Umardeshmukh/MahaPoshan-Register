@@ -244,7 +244,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
               <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 max-w-md mx-auto">
                 <p className="font-semibold">खाते पूर्ववत (Restore) करावयाचे असल्यास:</p>
                 <p className="text-[11px] text-amber-800 mt-0.5">
-                  कृपया मुदत संपण्यापूर्वी त्वरित Super Admin शी संपर्क साधा: <strong>umardesh@gmail.com</strong>
+                  कृपया मुदत संपण्यापूर्वी त्वरित Super Admin शी संपर्क साधा: <strong>poshanragister@gmail.com</strong>
                 </p>
               </div>
 
@@ -356,6 +356,20 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                   <RefreshCw className="w-4 h-4" />
                   <span>स्थिती अपडेट करा (Check Status)</span>
                 </button>
+              </div>
+
+              {/* Support & Admin Contact Card */}
+              <div className="mt-5 p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl text-center max-w-md mx-auto">
+                <p className="text-xs text-amber-900 font-semibold flex items-center justify-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-amber-700" />
+                  <span>मदत व संपर्क (Admin & Support Contact):</span>
+                </p>
+                <a
+                  href="mailto:poshanragister@gmail.com"
+                  className="font-mono text-xs font-bold text-amber-950 underline hover:text-amber-800 mt-1 inline-block"
+                >
+                  poshanragister@gmail.com
+                </a>
               </div>
             </div>
           ) : (

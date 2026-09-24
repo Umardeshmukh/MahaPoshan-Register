@@ -40,6 +40,7 @@ import {
 import { LegalModal } from './components/LegalModal';
 import { ReferralCard } from './components/ReferralCard';
 import { LegalDocType } from './types';
+import { Mail } from 'lucide-react';
 
 export default function App() {
   const [appData, setAppData] = useState<AppData>(() => getInitialData());
@@ -555,6 +556,15 @@ export default function App() {
               >
                 4. Contact & Legal
               </button>
+              <span className="text-slate-300">•</span>
+              <a
+                href="mailto:poshanragister@gmail.com"
+                className="text-amber-800 hover:text-amber-950 font-bold hover:underline inline-flex items-center gap-1"
+                title="अधिकृत संपर्क ईमेल"
+              >
+                <Mail className="w-3 h-3 text-amber-700" />
+                <span>Contact Us: poshanragister@gmail.com</span>
+              </a>
             </div>
           </div>
         </footer>

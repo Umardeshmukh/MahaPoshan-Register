@@ -12,6 +12,7 @@ import {
   School,
   Lock,
   FileSpreadsheet,
+  Mail,
 } from 'lucide-react';
 
 export const AuthLandingView: React.FC = () => {
@@ -113,6 +114,19 @@ export const AuthLandingView: React.FC = () => {
               शाळा व शिक्षक सोल्यूशन
             </span>
           </div>
+
+          <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-center">
+            <p className="text-[11px] text-amber-900 font-semibold flex items-center justify-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-amber-700" />
+              <span>मदत व संपर्क (Contact Us):</span>
+              <a
+                href="mailto:poshanragister@gmail.com"
+                className="font-mono underline font-bold hover:text-amber-950"
+              >
+                poshanragister@gmail.com
+              </a>
+            </p>
+          </div>
         </div>
 
         {/* Feature Highlights Grid */}
@@ -193,6 +207,15 @@ export const AuthLandingView: React.FC = () => {
             >
               4. Contact & Legal
             </button>
+            <span className="text-slate-300">•</span>
+            <a
+              href="mailto:poshanragister@gmail.com"
+              className="text-amber-800 hover:text-amber-950 font-bold hover:underline inline-flex items-center gap-1"
+              title="अधिकृत संपर्क ईमेल"
+            >
+              <Mail className="w-3 h-3 text-amber-700" />
+              <span>poshanragister@gmail.com</span>
+            </a>
           </div>
         </div>
       </footer>

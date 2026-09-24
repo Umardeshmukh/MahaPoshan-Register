@@ -149,7 +149,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     e.preventDefault();
     const updated = {
       passcode: settingsPasscode.trim() || DEFAULT_SUPER_ADMIN_PASSCODE,
-      adminEmail: settingsAdminEmail.trim() || 'umardesh@gmail.com',
+      adminEmail: settingsAdminEmail.trim() || 'poshanragister@gmail.com',
       emailAlertsEnabled: settingsEmailAlerts,
       defaultDurationMonths: settingsDefaultDuration,
       referralRewardAmount: config.referralRewardAmount || 0,

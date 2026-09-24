@@ -66,6 +66,7 @@ import {
   ShieldCheck,
   HelpCircle,
   CheckCheck,
+  Mail,
 } from 'lucide-react';
 
 interface AdminSettingsViewProps {
@@ -1088,6 +1089,30 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Support & Contact Card */}
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <Mail className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">
+                    मदत व तांत्रिक संपर्क (Contact & Support)
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    कोणत्याही प्रश्नासाठी किंवा मार्गदर्शनासाठी ॲडमिनशी थेट संपर्क साधा:
+                  </p>
+                </div>
+              </div>
+              <a
+                href="mailto:poshanragister@gmail.com?subject=MahaPoshan%20Settings%20Query"
+                className="px-4 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>poshanragister@gmail.com</span>
+              </a>
             </div>
           </div>
         </form>

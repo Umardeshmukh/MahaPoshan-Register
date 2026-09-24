@@ -214,7 +214,7 @@ export async function sendSchoolRegistrationAlert(
   `.trim();
 
   return sendEmail({
-    to: 'umardesh@gmail.com',
+    to: 'poshanragister@gmail.com',
     subject: `[MahaPoshan] ${title}: ${request.schoolName} (${request.udiseNumber})`,
     html,
   });
@@ -290,7 +290,7 @@ export async function sendApprovalConfirmationEmail(params: {
 /**
  * Dispatches a test email to verify the Resend connection.
  */
-export async function sendTestEmail(toEmail: string = 'umardesh@gmail.com'): Promise<SendEmailResponse> {
+export async function sendTestEmail(toEmail: string = 'poshanragister@gmail.com'): Promise<SendEmailResponse> {
   const html = `
     <div style="font-family: sans-serif; padding: 20px; color: #1e293b;">
       <h2 style="color: #92400e;">⚡ MahaPoshan Register • Resend Email चाचणी</h2>
