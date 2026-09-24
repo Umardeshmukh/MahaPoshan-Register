@@ -1570,10 +1570,9 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="number"
                     min="1"
-                    max="1000"
                     value={simStudents}
                     onChange={(e) => setSimStudents(Math.max(1, parseInt(e.target.value, 10) || 0))}
-                    className="w-14 font-mono font-bold text-slate-900 focus:outline-none border-b border-amber-400 text-center"
+                    className="w-16 font-mono font-bold text-slate-900 focus:outline-none border-b border-amber-400 text-center"
                   />
                 </div>
 

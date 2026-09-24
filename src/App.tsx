@@ -79,11 +79,25 @@ export default function App() {
     );
   });
 
+  // Track landing page route: #landing or #overview or /landing
+  const [isLandingRoute, setIsLandingRoute] = useState<boolean>(() => {
+    return (
+      window.location.hash === '#landing' ||
+      window.location.hash === '#home' ||
+      window.location.pathname.includes('/landing')
+    );
+  });
+
   useEffect(() => {
     const handleLocationChange = () => {
       setIsSuperAdminRoute(
         window.location.hash === '#super-admin' ||
         window.location.pathname.includes('/super-admin')
+      );
+      setIsLandingRoute(
+        window.location.hash === '#landing' ||
+        window.location.hash === '#home' ||
+        window.location.pathname.includes('/landing')
       );
     };
 
@@ -424,8 +438,8 @@ export default function App() {
     );
   }
 
-  // 3. Compulsory Sign-In Gate: Show Landing Page if not signed in
-  if (!isSignedIn) {
+  // 3. Compulsory Sign-In Gate OR #landing route: Show Landing Page
+  if (!isSignedIn || isLandingRoute) {
     return <AuthLandingView />;
   }
 

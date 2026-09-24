@@ -249,26 +249,26 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
 
         {/* UPI Payout Settings Form */}
         <div className="mt-6 bg-black/25 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-white/15">
-          <div className="flex items-center gap-2 mb-2">
+          {/* <div className="flex items-center gap-2 mb-2">
             <Wallet className="w-4 h-4 text-emerald-400" />
             <h4 className="font-bold text-sm text-white">
               बक्षीस मिळण्यासाठी आपला UPI तपशील नोंदवा
             </h4>
-          </div>
-          <p className="text-[11px] text-amber-100/80 mb-3">
+          </div> */}
+          {/* <p className="text-[11px] text-amber-100/80 mb-3">
             शाळा मंजूर झाल्यानंतर ॲडमिन थेट आपल्या दिलेल्या PhonePe / Google Pay UPI आयडीवर बक्षीस रक्कम पाठवतील.
-          </p>
+          </p> */}
 
-          <form onSubmit={handleSavePayout} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <input
+          {/* <form onSubmit={handleSavePayout} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"> */}
+          {/* <input
               type="text"
               required
               placeholder="UPI ID (उदा. 9822114455@okhdfcbank)"
               value={upiId}
               onChange={(e) => setUpiId(e.target.value)}
               className="sm:col-span-2 px-3 py-2 rounded-xl bg-white/90 text-slate-900 placeholder:text-slate-500 text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-400"
-            />
-            <button
+            /> */}
+          {/* <button
               type="submit"
               disabled={isSavingPayout}
               className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
@@ -279,13 +279,13 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({
                   <span>जतन झाले!</span>
                 </>
               ) : (
-                <>
-                  <Send className="w-3.5 h-3.5" />
-                  <span>UPI जतन करा</span>
-                </>
+                // <>
+                //   <Send className="w-3.5 h-3.5" />
+                //   <span>UPI जतन करा</span>
+                // </>
               )}
             </button>
-          </form>
+          </form> */}
         </div>
 
         {/* Referred Schools Mini List */}

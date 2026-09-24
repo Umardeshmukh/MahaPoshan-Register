@@ -373,7 +373,6 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                         id="student-count-input"
                         type="number"
                         min="0"
-                        max="1000"
                         value={studentCount === 0 ? '' : studentCount}
                         onChange={(e) => {
                           const val = parseInt(e.target.value, 10);
