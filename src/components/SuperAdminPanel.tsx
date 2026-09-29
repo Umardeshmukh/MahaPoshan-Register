@@ -25,6 +25,8 @@ import {
   syncAllRequestsFromCloud,
   SUPER_ADMIN_AUTHORIZED_EMAILS,
   verifyAdminCredentials,
+  bulkApproveRequests,
+  requestMoreInfo,
 } from '../lib/subscription-store';
 import {
   getAllReferrals,
@@ -289,9 +291,17 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   };
 
   const handleReject = (id: string) => {
-    const reason = prompt('Enter reason for rejection (or leave blank):');
+    const reason = prompt('Enter reason for rejection (नाकारण्याचे कारण प्रविष्ट करा):');
     if (reason !== null) {
-      rejectOrRevokeAccess(id, reason);
+      rejectOrRevokeAccess(id, reason.trim() || 'प्रशासकीय खातरजमा पूर्ण न झाल्याने ही विनंती नाकारण्यात आली आहे.', currentUserEmail || 'umardesh@gmail.com');
+      loadData();
+    }
+  };
+
+  const handleRequestMoreInfo = (id: string) => {
+    const feedback = prompt('सुधारणेसाठी आवश्यक माहिती / संदेश प्रविष्ट करा (Enter instructions for applicant to correct details):');
+    if (feedback !== null && feedback.trim()) {
+      requestMoreInfo(id, feedback.trim(), currentUserEmail || 'umardesh@gmail.com');
       loadData();
     }
   };
@@ -471,7 +481,48 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'mr'));
   }, [requests]);
 
-  // Filter requests by search query, status, and district
+  // Queue counts for Super Admin Review Queues (Requirement 5)
+  const queueCounts = useMemo(() => {
+    const counts = {
+      all: requests.length,
+      pending: 0,
+      needs_info: 0,
+      verified: 0,
+      rejected: 0,
+      expiring: 0,
+      suspended: 0,
+    };
+    for (const r of requests) {
+      const daysLeft = r.expiresAt
+        ? Math.ceil((new Date(r.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      if (r.verificationStatus === 'MORE_INFO_REQUIRED') {
+        counts.needs_info++;
+      } else if (r.verificationStatus === 'REJECTED' || r.status === 'rejected') {
+        counts.rejected++;
+      } else if (r.accessStatus === 'SUSPENDED' || r.status === 'pending_deletion') {
+        counts.suspended++;
+      }
+
+      if (r.status === 'active' && daysLeft <= 15 && daysLeft >= 0) {
+        counts.expiring++;
+      }
+
+      if ((r.verificationStatus === 'PENDING' || r.status === 'pending') &&
+          r.verificationStatus !== 'MORE_INFO_REQUIRED' &&
+          r.verificationStatus !== 'REJECTED') {
+        counts.pending++;
+      }
+
+      if (r.verificationStatus === 'VERIFIED' || r.status === 'active') {
+        counts.verified++;
+      }
+    }
+    return counts;
+  }, [requests]);
+
+  // Filter requests by search query, review queue status, and district
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
       const q = searchTerm.toLowerCase().trim();
@@ -484,7 +535,31 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
         (r.centerCluster && r.centerCluster.toLowerCase().includes(q)) ||
         (r.district && r.district.toLowerCase().includes(q));
 
-      const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+      const daysLeft = r.expiresAt
+        ? Math.ceil((new Date(r.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      let matchesStatus = true;
+      if (statusFilter === 'all') {
+        matchesStatus = true;
+      } else if (statusFilter === 'pending') {
+        matchesStatus = (r.verificationStatus === 'PENDING' || r.status === 'pending') &&
+          r.verificationStatus !== 'MORE_INFO_REQUIRED' &&
+          r.verificationStatus !== 'REJECTED';
+      } else if (statusFilter === 'needs_info') {
+        matchesStatus = r.verificationStatus === 'MORE_INFO_REQUIRED';
+      } else if (statusFilter === 'verified') {
+        matchesStatus = r.verificationStatus === 'VERIFIED' || r.status === 'active';
+      } else if (statusFilter === 'rejected') {
+        matchesStatus = r.verificationStatus === 'REJECTED' || r.status === 'rejected';
+      } else if (statusFilter === 'expiring') {
+        matchesStatus = r.status === 'active' && daysLeft <= 15 && daysLeft >= 0;
+      } else if (statusFilter === 'suspended') {
+        matchesStatus = r.accessStatus === 'SUSPENDED' || r.status === 'pending_deletion';
+      } else {
+        matchesStatus = r.status === statusFilter;
+      }
+
       const matchesDistrict = districtFilter === 'all' || r.district === districtFilter;
 
       return matchesSearch && matchesStatus && matchesDistrict;
@@ -508,32 +583,28 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     }
   };
 
-  // Bulk Approval Handler
+  // Bulk Approval Handler (Requirement 7: Individual audit log for each approval)
   const handleBulkApprove = async () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`आपण निवडलेल्या ${selectedIds.length} शाळांना ${bulkDuration} महिन्यांसाठी मंजूर करू इच्छिता का?`)) return;
+    const durationLabel = bulkDuration === 0 ? '१४ दिवस Trial' : `${bulkDuration} महिने (${bulkDuration} Months)`;
+    if (!window.confirm(`आपण निवडलेल्या ${selectedIds.length} शाळांना ${durationLabel} साठी मंजूर करू इच्छिता का?`)) return;
 
     setIsProcessingBulk(true);
-    let successCount = 0;
-    for (const id of selectedIds) {
-      const res = approveAccessRequest(id, bulkDuration);
-      if (res) {
-        successCount++;
-        if (res.userEmail && config.emailAlertsEnabled) {
-          sendApprovalConfirmationEmail({
-            schoolName: res.schoolName,
-            userEmail: res.userEmail,
-            expiresAt: res.expiresAt || '',
-            durationMonths: bulkDuration,
-          }).catch(() => {});
-        }
-      }
+    try {
+      const results = bulkApproveRequests(
+        selectedIds,
+        bulkDuration,
+        currentUserEmail || 'umardesh@gmail.com'
+      );
+      setIsProcessingBulk(false);
+      setSelectedIds([]);
+      await loadData();
+      setBulkFeedback(`${results.approvedCount} शाळा यशस्वीरित्या मंजूर करण्यात आल्या! प्रत्येक मंजुरीसाठी स्वतंत्र ऑडिट नोंद जतन केली आहे.`);
+      setTimeout(() => setBulkFeedback(null), 4000);
+    } catch (err) {
+      console.error(err);
+      setIsProcessingBulk(false);
     }
-    setIsProcessingBulk(false);
-    setSelectedIds([]);
-    await loadData();
-    setBulkFeedback(`${successCount} शाळा यशस्वीरित्या मंजूर करण्यात आल्या!`);
-    setTimeout(() => setBulkFeedback(null), 4000);
   };
 
   // Bulk Subscription Extension Handler
@@ -895,10 +966,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
             <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  School Profiles & Subscription Management
+                  School Profiles & Verification Queue
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Approve access requests and manage subscription durations & 28-day data retention
+                  Review, verify schools, manage subscription durations and process access requests
                 </p>
               </div>
 
@@ -914,19 +985,6 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
-
-                {/* Status Filter */}
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
-                >
-                  <option value="all">All Status</option>
-                  <option value="pending">Pending Only</option>
-                  <option value="active">Active Only</option>
-                  <option value="pending_deletion">Pending Deletion (28 Days)</option>
-                  <option value="rejected">Rejected</option>
-                </select>
 
                 {/* District Filter Dropdown */}
                 <select
@@ -965,6 +1023,35 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               </div>
             </div>
 
+            {/* 5. Review Queue Sub-tabs (Requirement 5) */}
+            <div className="flex items-center gap-1.5 p-3 border-b border-slate-200 bg-slate-50/70 overflow-x-auto">
+              {[
+                { id: 'pending', label: 'प्रलंबित (Pending)', count: queueCounts.pending, color: 'text-amber-800 bg-amber-100' },
+                { id: 'needs_info', label: 'माहिती आवश्यक (Needs Info)', count: queueCounts.needs_info, color: 'text-purple-800 bg-purple-100' },
+                { id: 'verified', label: 'पडताळणी पूर्ण (Verified)', count: queueCounts.verified, color: 'text-emerald-800 bg-emerald-100' },
+                { id: 'rejected', label: 'नाकारलेले (Rejected)', count: queueCounts.rejected, color: 'text-rose-800 bg-rose-100' },
+                { id: 'expiring', label: 'मुदत संपत आलेले (Expiring)', count: queueCounts.expiring, color: 'text-orange-800 bg-orange-100' },
+                { id: 'suspended', label: 'निलंबित (Suspended)', count: queueCounts.suspended, color: 'text-slate-800 bg-slate-200' },
+                { id: 'all', label: 'सर्व शाळा (All)', count: queueCounts.all, color: 'text-slate-700 bg-slate-100' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+                    statusFilter === tab.id
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full ${statusFilter === tab.id ? 'bg-white/20 text-white' : tab.color}`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
             {/* Bulk Action Feedback Message */}
             {bulkFeedback && (
               <div className="mx-4 mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold animate-in fade-in">
@@ -988,10 +1075,11 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                     onChange={(e) => setBulkDuration(Number(e.target.value))}
                     className="px-2.5 py-1 rounded-lg bg-slate-800 text-white text-xs border border-slate-700 focus:outline-hidden"
                   >
+                    <option value={0}>१४ दिवस चाचणी (Trial - 14 Days)</option>
+                    <option value={1}>१ महिना (1 Month)</option>
                     <option value={3}>३ महिने (3 Months)</option>
                     <option value={6}>६ महिने (6 Months)</option>
                     <option value={12}>१२ महिने (1 Full Year)</option>
-                    <option value={24}>२४ महिने (2 Years)</option>
                   </select>
 
                   <button
@@ -1000,7 +1088,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                     onClick={handleBulkApprove}
                     className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    {isProcessingBulk ? 'चालू आहे...' : 'मंजूर करा (Approve)'}
+                    {isProcessingBulk ? 'चालू आहे...' : 'एकत्रित मंजूर करा (Bulk Approve)'}
                   </button>
 
                   <button
@@ -1025,7 +1113,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
             {/* Table */}
             <div className="overflow-x-auto touch-pan-x">
-              <table className="w-full text-left text-xs border-collapse min-w-[720px]">
+              <table className="w-full text-left text-xs border-collapse min-w-[780px]">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <th className="py-3 px-3 w-8 text-center">
@@ -1047,24 +1135,26 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                       </button>
                     </th>
                     <th className="py-3 px-4">School & UDISE</th>
-                    <th className="py-3 px-4">Headmaster / Email</th>
                     <th className="py-3 px-4">Cluster & District</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Expiry / Retention</th>
+                    <th className="py-3 px-4">Applicant & Role</th>
+                    <th className="py-3 px-4">Referral</th>
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4">Verification & Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
-                        No requests or profiles found.
+                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                        No requests or profiles found in this queue.
                       </td>
                     </tr>
                   ) : (
                     filteredRequests.map((req) => {
-                      const isPending = req.status === 'pending';
-                      const isActive = req.status === 'active';
+                      const isPending = req.status === 'pending' || req.verificationStatus === 'PENDING';
+                      const isNeedsInfo = req.verificationStatus === 'MORE_INFO_REQUIRED';
+                      const isActive = req.status === 'active' || req.verificationStatus === 'VERIFIED';
                       const isPendingDeletion = req.status === 'pending_deletion';
                       const isSelected = selectedIds.includes(req.id);
                       const daysLeft = req.expiresAt
@@ -1073,15 +1163,6 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                           (1000 * 60 * 60 * 24)
                         )
                         : 0;
-                      const daysUntilPermanentDeletion = req.permanentDeletionDate
-                        ? Math.max(
-                          0,
-                          Math.ceil(
-                            (new Date(req.permanentDeletionDate).getTime() - Date.now()) /
-                            (1000 * 60 * 60 * 24)
-                          )
-                        )
-                        : 28;
 
                       return (
                         <tr
@@ -1107,11 +1188,6 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                             <div className="font-bold text-slate-900">{req.schoolName}</div>
                             <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
                               <span>UDISE: {req.udiseNumber}</span>
-                              {req.referralCode && (
-                                <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold text-[9px]">
-                                  Ref: {req.referralCode}
-                                </span>
-                              )}
                             </div>
                             {req.agreedToTerms && (
                               <div className="text-[10px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
@@ -1120,8 +1196,22 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                             )}
                           </td>
 
+                          <td className="py-3 px-4 text-slate-600">
+                            <div className="font-medium text-slate-800">{req.centerCluster || '-'}</div>
+                            <div className="text-[11px] text-slate-500">{req.district}</div>
+                          </td>
+
                           <td className="py-3 px-4">
-                            <div className="font-medium text-slate-800">{req.userName || '-'}</div>
+                            <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                              <span>{req.userName || '-'}</span>
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                req.role === 'TEACHER'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-purple-100 text-purple-800'
+                              }`}>
+                                {req.role || 'SCHOOL_ADMIN'}
+                              </span>
+                            </div>
                             <div className="text-[11px] text-slate-500">{req.userEmail}</div>
                             {req.phone && (
                               <div className="text-[10px] text-slate-400 font-mono">
@@ -1131,85 +1221,75 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                           </td>
 
                           <td className="py-3 px-4 text-slate-600">
-                            <div>{req.centerCluster || '-'}</div>
-                            <div className="text-[11px] text-slate-400">{req.district}</div>
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {isPending && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                <Clock className="w-3 h-3 text-amber-600" />
-                                <span>Pending</span>
+                            {req.referralCode ? (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-mono font-bold text-[10px]">
+                                {req.referralCode}
                               </span>
-                            )}
-                            {isActive && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                <span>Active</span>
-                              </span>
-                            )}
-                            {isPendingDeletion && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
-                                <AlertTriangle className="w-3 h-3 text-rose-600" />
-                                <span>Pending Deletion (28 Days)</span>
-                              </span>
-                            )}
-                            {req.status === 'rejected' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
-                                <XCircle className="w-3 h-3 text-slate-500" />
-                                <span>Rejected</span>
-                              </span>
-                            )}
-                            {req.status === 'expired' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                <Clock className="w-3 h-3 text-amber-600" />
-                                <span>Expired</span>
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {isPendingDeletion ? (
-                              <div className="space-y-0.5">
-                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700 font-bold text-[10px]">
-                                  <Clock className="w-3 h-3 text-rose-600" />
-                                  <span>{daysUntilPermanentDeletion} days left</span>
-                                </div>
-                                <div className="text-[10px] text-slate-500">
-                                  28-Day Data Retention
-                                </div>
-                              </div>
-                            ) : isActive && req.expiresAt ? (
-                              <div>
-                                <div className="font-mono text-slate-800">
-                                  {new Date(req.expiresAt).toLocaleDateString('en-IN')}
-                                </div>
-                                <div
-                                  className={`text-[10px] font-semibold ${daysLeft > 30
-                                    ? 'text-emerald-700'
-                                    : daysLeft > 0
-                                      ? 'text-amber-700'
-                                      : 'text-rose-700'
-                                    }`}
-                                >
-                                  {daysLeft > 0 ? `${daysLeft} days left` : 'Expired'}
-                                </div>
-                              </div>
                             ) : (
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
 
+                          <td className="py-3 px-4 text-slate-600">
+                            <div className="font-mono text-slate-700 text-[11px]">
+                              {new Date(req.requestedAt).toLocaleDateString('mr-IN')}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col gap-1 items-start">
+                              {/* 2. Automatic Validation Result Badge */}
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                req.validationResult === 'VERIFIED'
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  : req.validationResult === 'DUPLICATE'
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : req.validationResult === 'INVALID'
+                                  ? 'bg-red-100 text-red-800 border-red-300'
+                                  : 'bg-amber-100 text-amber-800 border-amber-300'
+                              }`}>
+                                <span>{req.validationResult || 'REQUIRES_REVIEW'}</span>
+                              </span>
+
+                              <div className="flex flex-wrap gap-1 text-[9px] text-slate-500">
+                                <span className={`px-1.5 py-0.5 rounded font-semibold ${
+                                  req.verificationStatus === 'VERIFIED'
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : req.verificationStatus === 'MORE_INFO_REQUIRED'
+                                    ? 'bg-purple-50 text-purple-700'
+                                    : req.verificationStatus === 'REJECTED'
+                                    ? 'bg-rose-50 text-rose-700'
+                                    : 'bg-amber-50 text-amber-700'
+                                }`}>
+                                  {req.verificationStatus || 'PENDING'}
+                                </span>
+                                {req.expiresAt && isActive && (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono">
+                                    Exp: {new Date(req.expiresAt).toLocaleDateString('mr-IN')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                              {isPending && (
+                              {(isPending || isNeedsInfo) && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenApproveModal(req)}
-                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
                                   >
                                     Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRequestMoreInfo(req.id)}
+                                    className="px-2 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-xs cursor-pointer"
+                                    title="Request applicant to correct details"
+                                  >
+                                    More Info
                                   </button>
                                   <button
                                     type="button"
@@ -1221,7 +1301,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                 </>
                               )}
 
-                              {isActive && (
+                              {isActive && !isNeedsInfo && (
                                 <div className="flex items-center gap-1">
                                   <button
                                     type="button"
@@ -1229,7 +1309,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                     className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
                                     title="Extend 1 Month"
                                   >
-                                    +1 Month
+                                    +1M
                                   </button>
                                   <button
                                     type="button"
@@ -1237,7 +1317,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                     className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
                                     title="Extend 6 Months"
                                   >
-                                    +6 Months
+                                    +6M
                                   </button>
                                 </div>
                               )}
@@ -1900,10 +1980,22 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               </button>
             </div>
 
-            <div className="my-4 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-slate-700">
-              <div className="font-bold text-slate-900">{selectedRequest.schoolName}</div>
-              <div>UDISE: {selectedRequest.udiseNumber}</div>
+            <div className="my-4 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-slate-700 text-xs">
+              <div className="font-bold text-slate-900 text-sm">{selectedRequest.schoolName}</div>
+              <div className="flex items-center justify-between">
+                <span>UDISE: <strong className="font-mono text-slate-900">{selectedRequest.udiseNumber}</strong></span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-semibold">
+                  Tenant: {selectedRequest.schoolId ? `${selectedRequest.schoolId.slice(0, 8)}...` : 'Primary Tenant'}
+                </span>
+              </div>
               <div>Email: {selectedRequest.userEmail}</div>
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-200 text-[11px] text-slate-600">
+                <span>Role: <strong>{selectedRequest.role || 'SCHOOL_ADMIN'}</strong></span>
+                <span>•</span>
+                <span>Verification: <strong className="text-emerald-700">{selectedRequest.verificationStatus || 'PENDING'}</strong></span>
+                <span>•</span>
+                <span>Subscription: <strong className="text-indigo-700">{selectedRequest.subscriptionStatus || 'TRIAL'}</strong></span>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -1913,6 +2005,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
+                    { label: 'Trial (१४ दिवस)', months: 0 },
                     { label: '1 Month', months: 1 },
                     { label: '3 Months', months: 3 },
                     { label: '6 Months', months: 6 },

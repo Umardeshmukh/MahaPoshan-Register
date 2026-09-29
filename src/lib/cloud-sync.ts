@@ -1,5 +1,20 @@
 import { supabase, isSupabaseConfigured } from './supabase-client';
-import { AppData, DailyRegisterEntry, MonthlyStockInward, SchoolProfile, UserAccessRequest, SubscriptionStatus } from '../types';
+import {
+  AppData,
+  DailyRegisterEntry,
+  MonthlyStockInward,
+  SchoolProfile,
+  UserAccessRequest,
+  SubscriptionStatus,
+  UserRole,
+  VerificationStatus,
+  AccessStatus,
+  SubscriptionTierStatus,
+  SchoolMembership,
+  AutoValidationResult,
+  SchoolValidationDetails,
+  StateTransitionAudit,
+} from '../types';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
 
@@ -122,29 +137,69 @@ export async function pullUserDataFromCloud(
     try {
       setSyncStatus('syncing');
 
-      // 1. Fetch School Profile
-      const schoolPromise = supabase
-        .from('schools')
-        .select('*')
-        .eq('clerk_user_id', clerkUserId)
-        .maybeSingle();
+      // 1. Resolve Tenant School via Membership (User -> Membership -> School) or direct school query
+      let resolvedSchoolId: string | null = null;
+      let userRole: UserRole = 'TEACHER';
 
-      // 2. Fetch All Daily Entries
-      const entriesPromise = supabase
-        .from('daily_entries')
-        .select('*')
-        .eq('clerk_user_id', clerkUserId);
+      try {
+        const { data: membershipData } = await supabase
+          .from('memberships')
+          .select('school_id, role')
+          .eq('clerk_user_id', clerkUserId)
+          .eq('is_active', true)
+          .maybeSingle();
 
-      // 3. Fetch All Monthly Stock Inwards
-      const stockPromise = supabase
-        .from('stock_inward')
-        .select('*')
-        .eq('clerk_user_id', clerkUserId);
+        if (membershipData?.school_id) {
+          resolvedSchoolId = membershipData.school_id;
+          userRole = (membershipData.role as UserRole) || 'TEACHER';
+        }
+      } catch (e) {
+        console.warn('Membership query fallback:', e);
+      }
 
-      const [schoolRes, entriesRes, stockRes] = await Promise.all([
-        schoolPromise,
-        entriesPromise,
-        stockPromise,
+      // Fetch School Record
+      let schoolRecord: any = null;
+      if (resolvedSchoolId) {
+        const { data } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', resolvedSchoolId)
+          .maybeSingle();
+        schoolRecord = data;
+      } else {
+        const { data } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('clerk_user_id', clerkUserId)
+          .maybeSingle();
+        schoolRecord = data;
+        if (schoolRecord?.id) {
+          resolvedSchoolId = schoolRecord.id;
+          userRole = 'SCHOOL_ADMIN';
+        }
+      }
+
+      cachedSchoolId = resolvedSchoolId;
+
+      // 2. Fetch All Daily Entries for this school tenant (or fallback to clerk_user_id)
+      let entriesQuery = supabase.from('daily_entries').select('*');
+      if (resolvedSchoolId) {
+        entriesQuery = entriesQuery.or(`school_id.eq.${resolvedSchoolId},clerk_user_id.eq.${clerkUserId}`);
+      } else {
+        entriesQuery = entriesQuery.eq('clerk_user_id', clerkUserId);
+      }
+
+      // 3. Fetch All Monthly Stock Inwards for this school tenant
+      let stockQuery = supabase.from('stock_inward').select('*');
+      if (resolvedSchoolId) {
+        stockQuery = stockQuery.or(`school_id.eq.${resolvedSchoolId},clerk_user_id.eq.${clerkUserId}`);
+      } else {
+        stockQuery = stockQuery.eq('clerk_user_id', clerkUserId);
+      }
+
+      const [entriesRes, stockRes] = await Promise.all([
+        entriesQuery,
+        stockQuery,
       ]);
 
       let hasAnyData = false;
@@ -152,19 +207,22 @@ export async function pullUserDataFromCloud(
       const dailyEntries: Record<string, DailyRegisterEntry> = {};
       const stockInward: Record<string, MonthlyStockInward> = {};
 
-      if (schoolRes.data) {
+      if (schoolRecord) {
         hasAnyData = true;
-        cachedSchoolId = schoolRes.data.id || null;
         profile = {
-          schoolName: schoolRes.data.school_name || '',
-          udiseNumber: schoolRes.data.udise_number || '',
-          centerCluster: schoolRes.data.center_cluster || '',
+          id: schoolRecord.id,
+          schoolName: schoolRecord.school_name || '',
+          udiseNumber: schoolRecord.udise_number || '',
+          centerCluster: schoolRecord.center_cluster || '',
           standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
-          district: schoolRes.data.district || '',
-          taluka: schoolRes.data.taluka || '',
-          headmasterName: schoolRes.data.headmaster_name || '',
-          inchargeTeacher: schoolRes.data.incharge_teacher || '',
-          cookName: schoolRes.data.cook_name || '',
+          district: schoolRecord.district || '',
+          taluka: schoolRecord.taluka || '',
+          headmasterName: schoolRecord.headmaster_name || '',
+          inchargeTeacher: schoolRecord.incharge_teacher || '',
+          cookName: schoolRecord.cook_name || '',
+          verificationStatus: schoolRecord.verification_status,
+          accessStatus: schoolRecord.access_status,
+          subscriptionStatus: schoolRecord.subscription_status,
         };
       }
 
@@ -183,6 +241,7 @@ export async function pullUserDataFromCloud(
         entriesRes.data.forEach((row: any) => {
           dailyEntries[row.date] = {
             id: row.date,
+            schoolId: row.school_id || cachedSchoolId || undefined,
             date: row.date,
             dayOfWeek: new Date(row.date).getDay() || 7,
             dayNameMr: '',
@@ -218,6 +277,7 @@ export async function pullUserDataFromCloud(
         profile,
         dailyEntries,
         stockInward,
+        schoolId: cachedSchoolId || undefined,
       };
     } catch (error) {
       console.error('Failed to pull user data from Supabase:', error);
@@ -498,6 +558,10 @@ export async function syncStockInwardToCloud(
 /**
  * Upserts School Profile into Supabase.
  */
+/**
+ * Upserts School Profile into Supabase.
+ * Ensures the school record exists with unique UDISE and creates/updates user membership as SCHOOL_ADMIN.
+ */
 export async function syncSchoolProfileToCloud(
   profile: SchoolProfile,
   clerkUserId: string,
@@ -520,25 +584,66 @@ export async function syncSchoolProfileToCloud(
       udise_number: profile.udiseNumber,
       center_cluster: profile.centerCluster || '',
       district: profile.district || '',
+      taluka: profile.taluka || '',
+      headmaster_name: profile.headmasterName || '',
+      incharge_teacher: profile.inchargeTeacher || '',
+      cook_name: profile.cookName || '',
       updated_at: new Date().toISOString(),
     };
 
+    if (profile.id || cachedSchoolId) {
+      row.id = profile.id || cachedSchoolId;
+    }
+
+    if (profile.verificationStatus) row.verification_status = profile.verificationStatus;
+    if (profile.accessStatus) row.access_status = profile.accessStatus;
+    if (profile.subscriptionStatus) row.subscription_status = profile.subscriptionStatus;
+
+    // Upsert by UDISE number (schools primary tenant unique key)
+    let schoolId: string | null = null;
     const { data, error } = await supabase
       .from('schools')
-      .upsert(row, { onConflict: 'clerk_user_id' })
+      .upsert(row, { onConflict: 'udise_number' })
       .select('id')
       .maybeSingle();
 
-    if (data?.id) {
-      cachedSchoolId = data.id;
+    if (error) {
+      // Fallback on clerk_user_id if udise constraint isn't matched
+      const fallback = await supabase
+        .from('schools')
+        .upsert(row, { onConflict: 'clerk_user_id' })
+        .select('id')
+        .maybeSingle();
+
+      if (fallback.error) {
+        console.warn('Supabase school profile sync error:', fallback.error);
+        setSyncStatus('error');
+        return;
+      }
+      schoolId = fallback.data?.id || null;
+    } else {
+      schoolId = data?.id || null;
     }
 
-    if (error) {
-      console.warn('Supabase school profile sync error:', error);
-      setSyncStatus('error');
-    } else {
-      setSyncStatus('synced');
+    if (schoolId) {
+      cachedSchoolId = schoolId;
+      // Maintain user membership as SCHOOL_ADMIN (User -> Membership -> School)
+      try {
+        await supabase.from('memberships').upsert({
+          clerk_user_id: clerkUserId,
+          school_id: schoolId,
+          user_email: userEmail || 'school@example.com',
+          user_name: userName || profile.headmasterName || 'मुख्याध्यापक',
+          role: 'SCHOOL_ADMIN',
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'clerk_user_id,school_id' });
+      } catch (memErr) {
+        console.warn('Membership upsert notice:', memErr);
+      }
     }
+
+    setSyncStatus('synced');
   } catch (err) {
     console.error('Failed to sync school profile to Supabase:', err);
     setSyncStatus('error');
@@ -547,12 +652,20 @@ export async function syncSchoolProfileToCloud(
 
 /**
  * Upserts a school access request into Supabase schools table so Super Admin can see it immediately.
+ * Links user to school via memberships table.
  */
 export async function syncAccessRequestToCloud(request: UserAccessRequest): Promise<boolean> {
   if (!isSupabaseConfigured() || !request.clerkUserId) return false;
 
   try {
     setSyncStatus('syncing');
+
+    const verificationStatus: VerificationStatus =
+      request.verificationStatus || (request.status === 'active' ? 'VERIFIED' : (request.status === 'rejected' ? 'REJECTED' : 'PENDING'));
+    const accessStatus: AccessStatus =
+      request.accessStatus || (request.status === 'active' ? 'ACTIVE' : (request.status === 'expired' ? 'EXPIRED' : (request.status === 'rejected' ? 'SUSPENDED' : 'PENDING')));
+    const subscriptionStatus: SubscriptionTierStatus =
+      request.subscriptionStatus || (request.status === 'active' ? 'ACTIVE' : (request.status === 'expired' ? 'EXPIRED' : 'TRIAL'));
 
     const row: any = {
       clerk_user_id: request.clerkUserId,
@@ -565,26 +678,60 @@ export async function syncAccessRequestToCloud(request: UserAccessRequest): Prom
       phone: request.phone || '',
       notes: request.notes || '',
       status: request.status || 'active',
+      verification_status: verificationStatus,
+      access_status: accessStatus,
+      subscription_status: subscriptionStatus,
       updated_at: new Date().toISOString(),
     };
 
     if (request.durationMonths !== undefined) row.duration_months = request.durationMonths;
     if (request.expiresAt !== undefined) row.expires_at = request.expiresAt;
+    if (request.schoolId) row.id = request.schoolId;
+    if (request.adminFeedback) row.admin_feedback = request.adminFeedback;
+    if (request.validationResult) row.validation_result = request.validationResult;
+
+    let schoolId: string | null = request.schoolId || null;
 
     const { data, error } = await supabase
       .from('schools')
-      .upsert(row, { onConflict: 'clerk_user_id' })
+      .upsert(row, { onConflict: 'udise_number' })
       .select('id')
       .maybeSingle();
 
     if (error) {
-      console.error('Failed to sync access request to Supabase:', error);
-      setSyncStatus('error');
-      return false;
+      // Fallback on clerk_user_id
+      const fallback = await supabase
+        .from('schools')
+        .upsert(row, { onConflict: 'clerk_user_id' })
+        .select('id')
+        .maybeSingle();
+
+      if (fallback.error) {
+        console.error('Failed to sync access request to Supabase:', fallback.error);
+        setSyncStatus('error');
+        return false;
+      }
+      schoolId = fallback.data?.id || null;
+    } else {
+      schoolId = data?.id || null;
     }
 
-    if (data?.id) {
-      cachedSchoolId = data.id;
+    if (schoolId) {
+      cachedSchoolId = schoolId;
+      // Maintain user membership as SCHOOL_ADMIN
+      try {
+        await supabase.from('memberships').upsert({
+          clerk_user_id: request.clerkUserId,
+          school_id: schoolId,
+          user_email: request.userEmail,
+          user_name: request.userName || 'मुख्याध्यापक',
+          role: request.role || 'SCHOOL_ADMIN',
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'clerk_user_id,school_id' });
+      } catch (memErr) {
+        console.warn('Membership sync notice:', memErr);
+      }
     }
 
     setSyncStatus('synced');
@@ -598,7 +745,7 @@ export async function syncAccessRequestToCloud(request: UserAccessRequest): Prom
 
 /**
  * Fetches all school registrations and access requests from Supabase Cloud.
- * Used by Super Admin Panel to see requests across all users and devices.
+ * Used by Super Admin Panel to see requests across all users and devices with orthogonal statuses.
  */
 export async function fetchAllSchoolsFromCloud(): Promise<UserAccessRequest[]> {
   if (!isSupabaseConfigured()) return [];
@@ -618,6 +765,8 @@ export async function fetchAllSchoolsFromCloud(): Promise<UserAccessRequest[]> {
 
     return data.map((row: any): UserAccessRequest => ({
       id: row.id || ('req_' + row.clerk_user_id),
+      schoolId: row.id,
+      role: (row.role as UserRole) || 'SCHOOL_ADMIN',
       clerkUserId: row.clerk_user_id,
       userEmail: row.user_email || '',
       userName: row.user_name || '',
@@ -627,11 +776,16 @@ export async function fetchAllSchoolsFromCloud(): Promise<UserAccessRequest[]> {
       district: row.district || '',
       phone: row.phone || '',
       notes: row.notes || '',
+      adminFeedback: row.admin_feedback || undefined,
+      validationResult: (row.validation_result as AutoValidationResult) || undefined,
       status: (row.status as SubscriptionStatus) || 'pending',
+      verificationStatus: (row.verification_status as VerificationStatus) || (row.status === 'active' ? 'VERIFIED' : (row.status === 'rejected' ? 'REJECTED' : 'PENDING')),
+      accessStatus: (row.access_status as AccessStatus) || (row.status === 'active' ? 'ACTIVE' : (row.status === 'expired' ? 'EXPIRED' : 'PENDING')),
+      subscriptionStatus: (row.subscription_status as SubscriptionTierStatus) || (row.status === 'active' ? 'ACTIVE' : (row.status === 'expired' ? 'EXPIRED' : 'TRIAL')),
       durationMonths: row.duration_months || undefined,
       expiresAt: row.expires_at || undefined,
       requestedAt: row.created_at || new Date().toISOString(),
-      approvedAt: row.status === 'active' ? row.updated_at : undefined,
+      approvedAt: (row.status === 'active' || row.access_status === 'ACTIVE') ? (row.approved_at || row.updated_at) : undefined,
     }));
   } catch (err) {
     console.error('Error fetching schools from cloud:', err);
@@ -641,12 +795,19 @@ export async function fetchAllSchoolsFromCloud(): Promise<UserAccessRequest[]> {
 
 /**
  * Updates a school's subscription/access status directly in Supabase.
+ * Supports updating orthogonal statuses (verification, access, subscription).
  */
 export async function updateSchoolStatusInCloud(
   clerkUserId: string,
   status: SubscriptionStatus,
   durationMonths?: number,
-  expiresAt?: string
+  expiresAt?: string,
+  options?: {
+    verificationStatus?: VerificationStatus;
+    accessStatus?: AccessStatus;
+    subscriptionStatus?: SubscriptionTierStatus;
+    schoolId?: string;
+  }
 ): Promise<boolean> {
   if (!isSupabaseConfigured() || !clerkUserId) return false;
 
@@ -656,13 +817,30 @@ export async function updateSchoolStatusInCloud(
       updated_at: new Date().toISOString(),
     };
     if (durationMonths !== undefined) payload.duration_months = durationMonths;
-    if (expiresAt !== undefined) payload.expires_at = expiresAt;
+    if (expiresAt !== undefined) {
+      payload.expires_at = expiresAt;
+      if (status === 'active') payload.approved_at = new Date().toISOString();
+    }
 
-    const { error } = await supabase
-      .from('schools')
-      .update(payload)
-      .eq('clerk_user_id', clerkUserId);
+    // Set orthogonal statuses
+    payload.verification_status = options?.verificationStatus || (
+      status === 'active' ? 'VERIFIED' : (status === 'rejected' ? 'REJECTED' : 'PENDING')
+    );
+    payload.access_status = options?.accessStatus || (
+      status === 'active' ? 'ACTIVE' : (status === 'expired' ? 'EXPIRED' : (status === 'rejected' ? 'SUSPENDED' : 'PENDING'))
+    );
+    payload.subscription_status = options?.subscriptionStatus || (
+      status === 'active' ? 'ACTIVE' : (status === 'expired' ? 'EXPIRED' : 'TRIAL')
+    );
 
+    let query = supabase.from('schools').update(payload);
+    if (options?.schoolId) {
+      query = query.eq('id', options.schoolId);
+    } else {
+      query = query.eq('clerk_user_id', clerkUserId);
+    }
+
+    const { error } = await query;
     if (error) {
       console.error('Failed to update school status in Supabase:', error);
       return false;
@@ -684,16 +862,36 @@ export async function fetchUserSchoolFromCloud(
   if (!isSupabaseConfigured() || !clerkUserId) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('schools')
-      .select('*')
+    // Check membership first
+    let schoolId: string | null = null;
+    let userRole: UserRole = 'TEACHER';
+
+    const { data: mem } = await supabase
+      .from('memberships')
+      .select('school_id, role')
       .eq('clerk_user_id', clerkUserId)
+      .eq('is_active', true)
       .maybeSingle();
 
+    if (mem?.school_id) {
+      schoolId = mem.school_id;
+      userRole = (mem.role as UserRole) || 'TEACHER';
+    }
+
+    let query = supabase.from('schools').select('*');
+    if (schoolId) {
+      query = query.eq('id', schoolId);
+    } else {
+      query = query.eq('clerk_user_id', clerkUserId);
+    }
+
+    const { data, error } = await query.maybeSingle();
     if (error || !data) return null;
 
     return {
       id: data.id || ('req_' + data.clerk_user_id),
+      schoolId: data.id,
+      role: userRole,
       clerkUserId: data.clerk_user_id,
       userEmail: data.user_email || '',
       userName: data.user_name || '',
@@ -704,14 +902,164 @@ export async function fetchUserSchoolFromCloud(
       phone: data.phone || '',
       notes: data.notes || '',
       status: (data.status as SubscriptionStatus) || 'pending',
+      verificationStatus: (data.verification_status as VerificationStatus) || (data.status === 'active' ? 'VERIFIED' : 'PENDING'),
+      accessStatus: (data.access_status as AccessStatus) || (data.status === 'active' ? 'ACTIVE' : (data.status === 'expired' ? 'EXPIRED' : 'PENDING')),
+      subscriptionStatus: (data.subscription_status as SubscriptionTierStatus) || (data.status === 'active' ? 'ACTIVE' : (data.status === 'expired' ? 'EXPIRED' : 'TRIAL')),
       durationMonths: data.duration_months || undefined,
       expiresAt: data.expires_at || undefined,
       requestedAt: data.created_at || new Date().toISOString(),
-      approvedAt: data.status === 'active' ? data.updated_at : undefined,
+      approvedAt: (data.status === 'active' || data.access_status === 'ACTIVE') ? (data.approved_at || data.updated_at) : undefined,
     };
   } catch (err) {
     console.error('Error fetching user school from cloud:', err);
     return null;
+  }
+}
+
+/**
+ * Fetches user membership info (role and school tenancy).
+ */
+export async function fetchUserMembership(clerkUserId: string): Promise<SchoolMembership | null> {
+  if (!isSupabaseConfigured() || !clerkUserId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('memberships')
+      .select('*')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      clerkUserId: data.clerk_user_id,
+      schoolId: data.school_id,
+      userEmail: data.user_email,
+      userName: data.user_name,
+      role: data.role as UserRole,
+      isActive: data.is_active,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Searches and looks up a school by UDISE number.
+ * Used in Stage 2 of registration to identify whether a school already exists.
+ */
+export async function lookupSchoolByUdise(udise: string): Promise<{
+  exists: boolean;
+  school?: {
+    id: string;
+    schoolName: string;
+    udiseNumber: string;
+    centerCluster?: string;
+    district?: string;
+    headmasterName?: string;
+    verificationStatus?: VerificationStatus;
+    accessStatus?: AccessStatus;
+    subscriptionStatus?: SubscriptionTierStatus;
+    clerkUserId?: string;
+  };
+} | null> {
+  const cleanUdise = udise.trim();
+  if (!cleanUdise) return { exists: false };
+
+  // Fallback to local storage if offline or Supabase unconfigured
+  if (!isSupabaseConfigured()) {
+    try {
+      const raw = localStorage.getItem('pm_poshan_access_requests_v1');
+      if (raw) {
+        const list: UserAccessRequest[] = JSON.parse(raw);
+        const match = list.find((r) => r.udiseNumber === cleanUdise);
+        if (match) {
+          return {
+            exists: true,
+            school: {
+              id: match.schoolId || match.id,
+              schoolName: match.schoolName,
+              udiseNumber: match.udiseNumber,
+              centerCluster: match.centerCluster,
+              district: match.district,
+              headmasterName: match.userName,
+              verificationStatus: match.verificationStatus,
+              accessStatus: match.accessStatus,
+              subscriptionStatus: match.subscriptionStatus,
+              clerkUserId: match.clerkUserId,
+            },
+          };
+        }
+      }
+    } catch {}
+    return { exists: false };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('*')
+      .eq('udise_number', cleanUdise)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { exists: false };
+    }
+
+    return {
+      exists: true,
+      school: {
+        id: data.id,
+        schoolName: data.school_name,
+        udiseNumber: data.udise_number,
+        centerCluster: data.center_cluster || '',
+        district: data.district || '',
+        headmasterName: data.headmaster_name || '',
+        verificationStatus: data.verification_status,
+        accessStatus: data.access_status,
+        subscriptionStatus: data.subscription_status,
+        clerkUserId: data.clerk_user_id,
+      },
+    };
+  } catch (err) {
+    console.warn('Error looking up school by UDISE:', err);
+    return { exists: false };
+  }
+}
+
+/**
+ * Appends state transition audit event to public.audit_logs in Supabase.
+ */
+export async function recordAuditLogToCloud(audit: StateTransitionAudit): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+  try {
+    const row: any = {
+      school_id: audit.schoolId || undefined,
+      user_id: audit.userId,
+      user_email: audit.userId,
+      user_role: 'SUPER_ADMIN',
+      action: 'STATUS_CHANGE',
+      table_name: 'schools',
+      record_id: audit.requestId,
+      old_values: { status: audit.previousStatus },
+      new_values: {
+        status: audit.newStatus,
+        reason: audit.reason || '',
+        admin_id: audit.adminId,
+      },
+      timestamp: audit.timestamp || new Date().toISOString(),
+    };
+    const { error } = await supabase.from('audit_logs').insert([row]);
+    if (error) {
+      console.warn('Supabase audit log insert notice:', error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Audit log write error:', e);
+    return false;
   }
 }
 

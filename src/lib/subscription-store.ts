@@ -1,4 +1,15 @@
-import { UserAccessRequest, SubscriptionStatus, AdminNotification } from '../types';
+import {
+  UserAccessRequest,
+  SubscriptionStatus,
+  AdminNotification,
+  UserRole,
+  VerificationStatus,
+  AccessStatus,
+  SubscriptionTierStatus,
+  AutoValidationResult,
+  SchoolValidationDetails,
+  StateTransitionAudit,
+} from '../types';
 import {
   recordReferralRegistration,
   syncReferralStatusWithSubscription,
@@ -9,7 +20,17 @@ import {
   fetchAllSchoolsFromCloud,
   updateSchoolStatusInCloud,
   fetchUserSchoolFromCloud,
+  recordAuditLogToCloud,
+  lookupSchoolByUdise,
 } from './cloud-sync';
+import {
+  sendApprovalConfirmationEmail,
+  sendMoreInfoRequiredEmail,
+  sendRejectionEmail,
+  sendTeacherJoinedNotification,
+  sendSubscriptionExpiryAlert,
+  sendSchoolRegistrationConfirmation,
+} from './email-service';
 
 const REQUESTS_STORAGE_KEY = 'pm_poshan_access_requests_v1';
 const NOTIFICATIONS_STORAGE_KEY = 'pm_poshan_admin_notifications_v1';
@@ -314,6 +335,129 @@ export function getUserAccessStatus(
   };
 }
 
+const AUDIT_STORAGE_KEY = 'pm_poshan_audit_logs_v1';
+
+export function getAuditLogs(): StateTransitionAudit[] {
+  try {
+    const raw = localStorage.getItem(AUDIT_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordStateTransitionAudit(audit: StateTransitionAudit): void {
+  try {
+    const logs = getAuditLogs();
+    const entry: StateTransitionAudit = {
+      ...audit,
+      id: audit.id || `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: audit.timestamp || new Date().toISOString(),
+    };
+    logs.unshift(entry);
+    if (logs.length > 500) logs.length = 500;
+    localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(logs));
+
+    // Also persist to cloud public.audit_logs
+    recordAuditLogToCloud(entry).catch((err) =>
+      console.warn('Supabase audit log sync notice:', err)
+    );
+  } catch (e) {
+    console.warn('Failed recording audit log:', e);
+  }
+}
+
+/**
+ * Performs automatic multi-point validation before submitting or verifying a school request.
+ * Rule: Never auto-approves solely because the UDISE format is valid.
+ */
+export function validateSchoolRegistrationRequestSync(
+  data: Partial<UserAccessRequest>
+): SchoolValidationDetails {
+  const udise = (data.udiseNumber || '').trim();
+  const email = (data.userEmail || '').trim().toLowerCase();
+  const clerkUserId = data.clerkUserId || '';
+  const reasons: string[] = [];
+
+  let isFormatValid = false;
+  if (/^\d{11}$/.test(udise)) {
+    isFormatValid = true;
+  } else {
+    reasons.push('UDISE क्रमांक अचूक ११ अंकांचा असावा (उदा. 2725...).');
+  }
+
+  // Check existing requests / schools in local store
+  const requests = loadRequests();
+  const existingWithSameUdise = requests.filter((r) => r.udiseNumber === udise && r.id !== data.id);
+  const isDuplicateSchool = existingWithSameUdise.length > 0;
+  const isDuplicateRequest = existingWithSameUdise.some(
+    (r) => r.clerkUserId === clerkUserId || (r.userEmail && r.userEmail.toLowerCase().trim() === email)
+  );
+  const hasExistingAdmin = existingWithSameUdise.some(
+    (r) => (r.role === 'SCHOOL_ADMIN' || !r.role) && (r.status === 'active' || r.verificationStatus === 'VERIFIED')
+  );
+  const hasExistingMembership = existingWithSameUdise.some(
+    (r) =>
+      (r.clerkUserId === clerkUserId || (r.userEmail && r.userEmail.toLowerCase().trim() === email)) &&
+      (r.status === 'active' || r.verificationStatus === 'VERIFIED')
+  );
+
+  // Suspicious request check: rapid repeated requests from same user/email in last hour
+  const oneHourAgo = Date.now() - 3600000;
+  const recentUserRequests = requests.filter(
+    (r) =>
+      (r.clerkUserId === clerkUserId || (r.userEmail && r.userEmail.toLowerCase().trim() === email)) &&
+      new Date(r.requestedAt).getTime() > oneHourAgo
+  );
+  if (recentUserRequests.length >= 4) {
+    reasons.push('एकाच खात्यावरून अल्प कालावधीत अनेक विनंत्या आल्या आहेत (Suspicious repeated activity).');
+  }
+
+  let result: AutoValidationResult = 'REQUIRES_REVIEW';
+
+  if (!isFormatValid) {
+    result = 'INVALID';
+  } else if (isDuplicateRequest) {
+    result = 'DUPLICATE';
+    reasons.push('या शाळेसाठी यापूर्वीच विनंती नोंदवली गेली आहे.');
+  } else if (isDuplicateSchool) {
+    if (data.role === 'TEACHER') {
+      result = 'REQUIRES_REVIEW';
+      reasons.push('शाळा आधीपासून अस्तित्वात आहे; शिक्षकाचे सदस्यत्व जोडले जात आहे.');
+    } else {
+      result = 'DUPLICATE';
+      reasons.push('हा UDISE क्रमांक आधीच नोंदणीकृत आहे. विद्यमान शाळेत शिक्षक म्हणून सामील व्हा.');
+    }
+  } else {
+    // Valid format and new school:
+    // Important rule: Never auto-approve solely because UDISE format is valid!
+    result = 'REQUIRES_REVIEW';
+    reasons.push('नवीन शाळा नोंदणी: सुपर ॲडमिन खातरजमा आवश्यक आहे.');
+  }
+
+  return {
+    result,
+    reasons,
+    isFormatValid,
+    isDuplicateSchool,
+    isDuplicateRequest,
+    hasExistingAdmin,
+    hasExistingMembership,
+    existingSchool: existingWithSameUdise[0]
+      ? {
+          id: existingWithSameUdise[0].schoolId || existingWithSameUdise[0].id,
+          schoolName: existingWithSameUdise[0].schoolName,
+          udiseNumber: existingWithSameUdise[0].udiseNumber,
+          centerCluster: existingWithSameUdise[0].centerCluster,
+          district: existingWithSameUdise[0].district,
+          headmasterName: existingWithSameUdise[0].userName,
+          verificationStatus: existingWithSameUdise[0].verificationStatus,
+          accessStatus: existingWithSameUdise[0].accessStatus,
+        }
+      : undefined,
+  };
+}
+
 /**
  * Submits a new user access request and notifies Super Admin (in-app + email)
  */
@@ -337,14 +481,26 @@ export function submitAccessRequest(
 
   const newStatus: SubscriptionStatus = isBypass ? 'active' : 'pending';
 
+  // Run automatic multi-point validation
+  const validationDetails = validateSchoolRegistrationRequestSync(data);
+
   const newRequest: UserAccessRequest = {
     ...data,
     id: existingIndex >= 0 ? requests[existingIndex].id : 'req_' + Date.now(),
+    role: data.role || (validationDetails.hasExistingAdmin ? 'TEACHER' : 'SCHOOL_ADMIN'),
     status: newStatus,
+    verificationStatus: isBypass ? 'VERIFIED' : 'PENDING',
+    accessStatus: isBypass ? 'ACTIVE' : 'PENDING',
+    subscriptionStatus: isBypass ? 'ACTIVE' : 'TRIAL',
+    validationResult: validationDetails.result,
+    validationDetails,
     approvedAt: isBypass ? new Date().toISOString() : undefined,
     durationMonths: isBypass ? durationMonths : undefined,
     expiresAt: isBypass ? expiry.toISOString() : undefined,
-    requestedAt: existingIndex >= 0 && requests[existingIndex].requestedAt ? requests[existingIndex].requestedAt : new Date().toISOString(),
+    requestedAt:
+      existingIndex >= 0 && requests[existingIndex].requestedAt
+        ? requests[existingIndex].requestedAt
+        : new Date().toISOString(),
   };
 
   if (existingIndex >= 0) {
@@ -353,6 +509,18 @@ export function submitAccessRequest(
     requests.unshift(newRequest);
   }
   saveRequests(requests);
+
+  // Record Audit Trail
+  recordStateTransitionAudit({
+    requestId: newRequest.id,
+    schoolId: newRequest.schoolId,
+    userId: newRequest.clerkUserId,
+    adminId: 'system',
+    previousStatus: 'NONE',
+    newStatus: newRequest.verificationStatus || 'PENDING',
+    reason: isBypass ? 'Authorized Super Admin Auto-Bypass' : 'User registration submitted',
+    timestamp: new Date().toISOString(),
+  });
 
   // Invalidate access cache so live checks see the new status immediately
   if (data.clerkUserId) {
@@ -380,8 +548,17 @@ export function submitAccessRequest(
   notifs.unshift(newNotif);
   saveAdminNotifications(notifs);
 
-  // Dispatch Email Notification
+  // Dispatch Email Notification to Super Admin
   sendAdminEmailNotification(newRequest);
+
+  // Dispatch Confirmation Email to Applicant
+  if (!isBypass && data.userEmail) {
+    sendSchoolRegistrationConfirmation({
+      schoolName: data.schoolName,
+      userEmail: data.userEmail,
+      udiseNumber: data.udiseNumber,
+    }).catch((err) => console.warn('Confirmation email dispatch warning:', err));
+  }
 
   // If referral code was entered, log referral registration
   if (data.referralCode) {
@@ -407,36 +584,59 @@ export function submitAccessRequest(
 }
 
 /**
- * Super Admin approves user access with a specific duration (in months) or custom date
+ * Super Admin approves user access with a specific duration (in months), trial or custom date
  */
 export function approveAccessRequest(
   requestId: string,
   durationMonths: number,
-  customExpiryDate?: string
+  customExpiryDate?: string,
+  adminId: string = DEFAULT_SUPER_ADMIN_EMAIL,
+  isTrial: boolean = false
 ): UserAccessRequest | null {
   const requests = loadRequests();
   const reqIndex = requests.findIndex((r) => r.id === requestId);
   if (reqIndex === -1) return null;
 
+  const effectiveIsTrial = isTrial || durationMonths === 0;
   const now = new Date();
   let expiry: Date;
 
   if (customExpiryDate) {
     expiry = new Date(customExpiryDate);
+  } else if (effectiveIsTrial) {
+    expiry = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
   } else {
     expiry = new Date(now);
     expiry.setMonth(expiry.getMonth() + durationMonths);
   }
 
+  const previousStatus = requests[reqIndex].verificationStatus || requests[reqIndex].status;
+
   requests[reqIndex] = {
     ...requests[reqIndex],
     status: 'active',
+    verificationStatus: 'VERIFIED',
+    accessStatus: 'ACTIVE',
+    subscriptionStatus: effectiveIsTrial ? 'TRIAL' : 'ACTIVE',
     approvedAt: now.toISOString(),
-    durationMonths,
+    durationMonths: effectiveIsTrial ? 0 : durationMonths,
     expiresAt: expiry.toISOString(),
+    adminFeedback: undefined,
   };
 
   saveRequests(requests);
+
+  // Record Audit Trail
+  recordStateTransitionAudit({
+    requestId: requests[reqIndex].id,
+    schoolId: requests[reqIndex].schoolId,
+    userId: requests[reqIndex].clerkUserId,
+    adminId,
+    previousStatus,
+    newStatus: 'VERIFIED',
+    reason: effectiveIsTrial ? `Trial Activated (14 Days)` : `Subscription Approved (${durationMonths} Months)`,
+    timestamp: now.toISOString(),
+  });
 
   // Sync approval to Supabase schools table
   if (requests[reqIndex].clerkUserId) {
@@ -444,8 +644,24 @@ export function approveAccessRequest(
       requests[reqIndex].clerkUserId,
       'active',
       durationMonths,
-      expiry.toISOString()
+      expiry.toISOString(),
+      {
+        verificationStatus: 'VERIFIED',
+        accessStatus: 'ACTIVE',
+        subscriptionStatus: isTrial ? 'TRIAL' : 'ACTIVE',
+        schoolId: requests[reqIndex].schoolId,
+      }
     ).catch((err) => console.warn('Supabase status update error:', err));
+  }
+
+  // Dispatch Approval Confirmation Email via Resend
+  if (requests[reqIndex].userEmail) {
+    sendApprovalConfirmationEmail({
+      schoolName: requests[reqIndex].schoolName,
+      userEmail: requests[reqIndex].userEmail,
+      expiresAt: expiry.toISOString(),
+      durationMonths,
+    }).catch((err) => console.warn('Approval email error:', err));
   }
 
   // Sync with referral store: Mark referral reward eligible
@@ -457,6 +673,159 @@ export function approveAccessRequest(
   syncAllRequestsCache = null;
 
   return requests[reqIndex];
+}
+
+/**
+ * Super Admin requests more information from an applicant.
+ */
+export function requestMoreInfo(
+  requestId: string,
+  adminMessage: string,
+  adminId: string = DEFAULT_SUPER_ADMIN_EMAIL
+): UserAccessRequest | null {
+  const requests = loadRequests();
+  const reqIndex = requests.findIndex((r) => r.id === requestId);
+  if (reqIndex === -1) return null;
+
+  const previousStatus = requests[reqIndex].verificationStatus || requests[reqIndex].status;
+
+  requests[reqIndex] = {
+    ...requests[reqIndex],
+    verificationStatus: 'MORE_INFO_REQUIRED',
+    adminFeedback: adminMessage,
+    notes: adminMessage,
+  };
+
+  saveRequests(requests);
+
+  // Record Audit Trail
+  recordStateTransitionAudit({
+    requestId: requests[reqIndex].id,
+    schoolId: requests[reqIndex].schoolId,
+    userId: requests[reqIndex].clerkUserId,
+    adminId,
+    previousStatus,
+    newStatus: 'MORE_INFO_REQUIRED',
+    reason: adminMessage,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Sync to Supabase
+  if (requests[reqIndex].clerkUserId) {
+    updateSchoolStatusInCloud(
+      requests[reqIndex].clerkUserId,
+      requests[reqIndex].status,
+      undefined,
+      undefined,
+      {
+        verificationStatus: 'MORE_INFO_REQUIRED',
+        schoolId: requests[reqIndex].schoolId,
+      }
+    ).catch((err) => console.warn('Supabase status update error:', err));
+  }
+
+  // Dispatch More Info Email via Resend
+  if (requests[reqIndex].userEmail) {
+    sendMoreInfoRequiredEmail({
+      schoolName: requests[reqIndex].schoolName,
+      userEmail: requests[reqIndex].userEmail,
+      adminMessage,
+    }).catch((err) => console.warn('More info email dispatch warning:', err));
+  }
+
+  if (requests[reqIndex].clerkUserId) {
+    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+  }
+  syncAllRequestsCache = null;
+
+  return requests[reqIndex];
+}
+
+/**
+ * Resubmits updated school information after Super Admin requested more info.
+ */
+export function resubmitMoreInfoRequest(
+  requestId: string,
+  updatedData: Partial<UserAccessRequest>
+): UserAccessRequest | null {
+  const requests = loadRequests();
+  const reqIndex = requests.findIndex((r) => r.id === requestId);
+  if (reqIndex === -1) return null;
+
+  const previousStatus = requests[reqIndex].verificationStatus || 'MORE_INFO_REQUIRED';
+
+  requests[reqIndex] = {
+    ...requests[reqIndex],
+    ...updatedData,
+    verificationStatus: 'PENDING',
+    status: 'pending',
+    resubmittedAt: new Date().toISOString(),
+    adminFeedback: undefined,
+  };
+
+  saveRequests(requests);
+
+  // Record Audit Trail
+  recordStateTransitionAudit({
+    requestId: requests[reqIndex].id,
+    schoolId: requests[reqIndex].schoolId,
+    userId: requests[reqIndex].clerkUserId,
+    adminId: 'user',
+    previousStatus,
+    newStatus: 'PENDING',
+    reason: 'User resubmitted requested information',
+    timestamp: new Date().toISOString(),
+  });
+
+  // Sync to Supabase
+  syncAccessRequestToCloud(requests[reqIndex]).catch((err) =>
+    console.warn('Supabase resubmission sync warning:', err)
+  );
+
+  // Alert Super Admin
+  const notifs = getAdminNotifications();
+  notifs.unshift({
+    id: 'notif_resubmit_' + Date.now(),
+    type: 'new_request',
+    title: 'माहिती सुधारून पुन्हा सादर केली!',
+    message: `${requests[reqIndex].schoolName} (${requests[reqIndex].userEmail}) यांनी विचारलेली माहिती सुधारून पुन्हा सादर केली आहे.`,
+    timestamp: new Date().toISOString(),
+    read: false,
+    requestId,
+  });
+  saveAdminNotifications(notifs);
+
+  if (requests[reqIndex].clerkUserId) {
+    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+  }
+  syncAllRequestsCache = null;
+
+  return requests[reqIndex];
+}
+
+/**
+ * Bulk approves multiple school requests at once.
+ * Every individual approval creates its own unique audit log.
+ */
+export function bulkApproveRequests(
+  requestIds: string[],
+  durationMonths: number,
+  adminId: string = DEFAULT_SUPER_ADMIN_EMAIL,
+  isTrial: boolean = false
+): { approvedCount: number; approvedRequests: UserAccessRequest[] } {
+  const approvedRequests: UserAccessRequest[] = [];
+
+  for (const id of requestIds) {
+    const res = approveAccessRequest(id, durationMonths, undefined, adminId, isTrial);
+    if (res) {
+      approvedRequests.push(res);
+    }
+  }
+
+  return {
+    approvedCount: approvedRequests.length,
+    approvedRequests,
+  };
 }
 
 // TTL Cache for cloud access status checks (60 seconds)
@@ -667,19 +1036,63 @@ export function extendSubscription(
  */
 export function rejectOrRevokeAccess(
   requestId: string,
-  reason?: string
+  reason: string = 'प्रशासकीय खातरजमा पूर्ण न झाल्याने ही विनंती नाकारण्यात आली आहे.',
+  adminId: string = DEFAULT_SUPER_ADMIN_EMAIL
 ): UserAccessRequest | null {
   const requests = loadRequests();
   const reqIndex = requests.findIndex((r) => r.id === requestId);
   if (reqIndex === -1) return null;
 
+  const previousStatus = requests[reqIndex].status;
+
   requests[reqIndex] = {
     ...requests[reqIndex],
     status: 'rejected',
-    notes: reason || requests[reqIndex].notes,
+    verificationStatus: 'REJECTED',
+    accessStatus: 'SUSPENDED',
+    subscriptionStatus: 'CANCELLED',
+    adminFeedback: reason,
+    notes: reason,
   };
 
   saveRequests(requests);
+
+  // Record Audit Trail
+  recordStateTransitionAudit({
+    requestId: requests[reqIndex].id,
+    schoolId: requests[reqIndex].schoolId,
+    userId: requests[reqIndex].clerkUserId,
+    adminId,
+    previousStatus,
+    newStatus: 'REJECTED',
+    reason,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Sync rejection to cloud
+  if (requests[reqIndex].clerkUserId) {
+    updateSchoolStatusInCloud(
+      requests[reqIndex].clerkUserId,
+      'rejected',
+      undefined,
+      undefined,
+      {
+        verificationStatus: 'REJECTED',
+        accessStatus: 'SUSPENDED',
+        subscriptionStatus: 'CANCELLED',
+        schoolId: requests[reqIndex].schoolId,
+      }
+    ).catch((err) => console.warn('Supabase status update error:', err));
+  }
+
+  // Dispatch Rejection Email via Resend
+  if (requests[reqIndex].userEmail) {
+    sendRejectionEmail({
+      schoolName: requests[reqIndex].schoolName,
+      userEmail: requests[reqIndex].userEmail,
+      reason,
+    }).catch((err) => console.warn('Rejection email dispatch warning:', err));
+  }
 
   // Sync with referral store
   syncReferralStatusWithSubscription(requestId, 'rejected');

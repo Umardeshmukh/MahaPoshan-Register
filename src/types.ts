@@ -1,6 +1,24 @@
 export type LanguageMode = 'mr' | 'en' | 'dual';
 
+export type UserRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'TEACHER';
+export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'MORE_INFO_REQUIRED' | 'REJECTED';
+export type AccessStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED';
+export type SubscriptionTierStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+
+export interface SchoolMembership {
+  id?: string;
+  clerkUserId: string;
+  schoolId: string;
+  userEmail: string;
+  userName?: string;
+  role: UserRole;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SchoolProfile {
+  id?: string; // Tenant School UUID
   schoolName: string;
   udiseNumber: string;
   centerCluster: string;
@@ -10,6 +28,9 @@ export interface SchoolProfile {
   headmasterName: string;
   inchargeTeacher: string;
   cookName: string;
+  verificationStatus?: VerificationStatus;
+  accessStatus?: AccessStatus;
+  subscriptionStatus?: SubscriptionTierStatus;
 }
 
 export type IngredientCategory = 'pulse' | 'grain' | 'condiment' | 'oil' | 'vegetable' | 'supplementary';
@@ -71,6 +92,7 @@ export interface DailyCalculationResult {
 
 export interface DailyRegisterEntry {
   id: string; // usually YYYY-MM-DD
+  schoolId?: string; // Tenant School UUID
   date: string; // YYYY-MM-DD
   dayOfWeek: number;
   dayNameMr: string;
@@ -192,8 +214,51 @@ export interface AppData {
 
 export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'rejected' | 'pending_deletion';
 
+export type AutoValidationResult = 'VERIFIED' | 'REQUIRES_REVIEW' | 'DUPLICATE' | 'INVALID';
+
+export interface SchoolValidationDetails {
+  result: AutoValidationResult;
+  reasons: string[];
+  isFormatValid: boolean;
+  isDuplicateSchool: boolean;
+  isDuplicateRequest: boolean;
+  hasExistingAdmin: boolean;
+  hasExistingMembership: boolean;
+  existingSchool?: {
+    id: string;
+    schoolName: string;
+    udiseNumber: string;
+    centerCluster?: string;
+    district?: string;
+    headmasterName?: string;
+    verificationStatus?: VerificationStatus;
+    accessStatus?: AccessStatus;
+  };
+}
+
+export interface StateTransitionAudit {
+  id?: string;
+  requestId: string;
+  schoolId?: string;
+  userId: string;
+  adminId: string;
+  previousStatus: string;
+  newStatus: string;
+  reason?: string;
+  timestamp: string;
+}
+
 export interface UserAccessRequest {
   id: string;
+  schoolId?: string; // Tenant School UUID
+  role?: UserRole;
+  verificationStatus?: VerificationStatus;
+  accessStatus?: AccessStatus;
+  subscriptionStatus?: SubscriptionTierStatus;
+  validationResult?: AutoValidationResult;
+  validationDetails?: SchoolValidationDetails;
+  adminFeedback?: string; // Feedback when MORE_INFO_REQUIRED or rejection
+  resubmittedAt?: string;
   clerkUserId: string;
   userEmail: string;
   userName: string;

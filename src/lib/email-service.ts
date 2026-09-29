@@ -316,3 +316,163 @@ export async function sendTestEmail(toEmail: string = 'umardesh@gmail.com'): Pro
     html,
   });
 }
+
+/**
+ * Sends notification when Super Admin requests additional information.
+ */
+export async function sendMoreInfoRequiredEmail(params: {
+  schoolName: string;
+  userEmail: string;
+  adminMessage: string;
+}): Promise<SendEmailResponse> {
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #f59e0b; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">शाळा नोंदणी: अतिरिक्त माहिती आवश्यक</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार,</p>
+        <p>आपल्या <strong>${params.schoolName}</strong> शाळेच्या नोंदणी खातरजमेसाठी सुपर ॲडमिन कडून खालील माहिती विचारण्यात आली आहे:</p>
+        <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 16px; border-radius: 10px; color: #92400e; font-size: 14px; margin: 16px 0;">
+          <strong>ॲडमिन संदेश:</strong><br>${params.adminMessage}
+        </div>
+        <p>कृपया MahaPoshan Register पोर्टलवर जाऊन माहिती दुरुस्त करून पुन्हा सादर करा.</p>
+        <div style="text-align: center; margin-top: 20px;">
+          <a href="https://mahaposhan.in" style="display: inline-block; background: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">पोर्टलवर माहिती दुरुस्त करा</a>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.userEmail,
+    subject: `[MahaPoshan] अतिरिक्त माहिती आवश्यक: ${params.schoolName}`,
+    html,
+  });
+}
+
+/**
+ * Sends notification when registration or access request is rejected.
+ */
+export async function sendRejectionEmail(params: {
+  schoolName: string;
+  userEmail: string;
+  reason: string;
+}): Promise<SendEmailResponse> {
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #e11d48; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">नोंदणी विनंती नाकारण्यात आली</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार,</p>
+        <p>आपल्या <strong>${params.schoolName}</strong> शाळेसाठी सादर केलेली विनंती खालील कारणास्तव नाकारण्यात आली आहे:</p>
+        <div style="background: #ffe4e6; border: 1px solid #fecdd3; padding: 16px; border-radius: 10px; color: #9f1239; font-size: 14px; margin: 16px 0;">
+          <strong>नाकारण्याचे कारण:</strong><br>${params.reason}
+        </div>
+        <p>काही शंका असल्यास किंवा नवीन माहितीसह अर्ज करावयाचा असल्यास आपण पोर्टलवरून योग्य माहितीसह पुन्हा अर्ज करू शकता.</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.userEmail,
+    subject: `[MahaPoshan] नोंदणी विनंती नाकारली: ${params.schoolName}`,
+    html,
+  });
+}
+
+/**
+ * Sends notification to School Admin when a teacher joins the school.
+ */
+export async function sendTeacherJoinedNotification(params: {
+  schoolName: string;
+  adminEmail: string;
+  teacherName: string;
+  teacherEmail: string;
+}): Promise<SendEmailResponse> {
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #0284c7; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">नवीन शिक्षक शाळेत जोडले गेले</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार मुख्याध्यापक महोदय,</p>
+        <p>आपल्या <strong>${params.schoolName}</strong> शाळेमध्ये खालील शिक्षकाने प्रवेश घेतला आहे:</p>
+        <ul>
+          <li><strong>शिक्षकाचे नाव:</strong> ${params.teacherName}</li>
+          <li><strong>ईमेल:</strong> ${params.teacherEmail}</li>
+          <li><strong>भूमिका:</strong> TEACHER (दैनिक नोंदणी अधिकार)</li>
+        </ul>
+        <p>हे शिक्षक आता आपल्या शाळेच्या पोषण आहाराच्या दैनिक नोंदी करू शकतील.</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.adminEmail,
+    subject: `[MahaPoshan] नवीन शिक्षक जोडले: ${params.teacherName} (${params.schoolName})`,
+    html,
+  });
+}
+
+/**
+ * Sends notification when subscription is expiring soon.
+ */
+export async function sendSubscriptionExpiryAlert(params: {
+  schoolName: string;
+  userEmail: string;
+  expiresAt: string;
+  daysLeft: number;
+}): Promise<SendEmailResponse> {
+  const formattedDate = new Date(params.expiresAt).toLocaleDateString('mr-IN');
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #ea580c; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">सदस्यत्व मुदत संपत आली आहे (${params.daysLeft} दिवस शिल्लक)</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार,</p>
+        <p>आपल्या <strong>${params.schoolName}</strong> शाळेच्या MahaPoshan Register सदस्यत्वाची मुदत <strong>${formattedDate}</strong> रोजी समाप्त होत आहे.</p>
+        <p>अखंड सेवेसाठी व नोंदी चालू ठेवण्यासाठी कृपया मुदत संपण्यापूर्वी नूतनीकरण करा.</p>
+        <div style="text-align: center; margin-top: 20px;">
+          <a href="https://mahaposhan.in" style="display: inline-block; background: #ea580c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">नूतनीकरण विनंती पाठवा</a>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.userEmail,
+    subject: `[MahaPoshan] सदस्यत्व समाप्त होत आहे (${params.daysLeft} दिवस): ${params.schoolName}`,
+    html,
+  });
+}
+
+/**
+ * Sends confirmation email to applicant that their school registration was received.
+ */
+export async function sendSchoolRegistrationConfirmation(params: {
+  schoolName: string;
+  userEmail: string;
+  udiseNumber: string;
+}): Promise<SendEmailResponse> {
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #92400e; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">शाळा नोंदणी विनंती प्राप्त झाली</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार,</p>
+        <p>आपल्या <strong>${params.schoolName}</strong> (UDISE: ${params.udiseNumber}) शाळेची नोंदणी विनंती MahaPoshan प्रणालीमध्ये यशस्वीरीत्या नोंदवली गेली आहे.</p>
+        <p>सुपर ॲडमिन द्वारे माहितीची खातरजमा होताच आपले खाते त्वरित सक्रिय केले जाईल आणि आपल्याला ईमेलद्वारे कळवले जाईल.</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.userEmail,
+    subject: `[MahaPoshan] नोंदणी विनंती प्राप्त झाली: ${params.schoolName}`,
+    html,
+  });
+}
