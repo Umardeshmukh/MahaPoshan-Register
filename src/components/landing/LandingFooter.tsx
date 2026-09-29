@@ -1,6 +1,6 @@
 import React from 'react';
 import { SignInButton } from '@clerk/react';
-import { Sparkles, Mail, ShieldAlert } from 'lucide-react';
+import { Sparkles, Mail, ShieldAlert, KeyRound } from 'lucide-react';
 import { LegalDocType } from '../../types';
 
 interface LandingFooterProps {
@@ -115,9 +115,22 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenLegal }) => 
                     type="button"
                     className="text-emerald-400 hover:text-emerald-300 font-bold cursor-pointer"
                   >
-                    Teacher / Admin Login &rarr;
+                    Teacher Login &rarr;
                   </button>
                 </SignInButton>
+              </li>
+              <li className="pt-1.5">
+                <a
+                  href="#super-admin"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.location.hash = '#super-admin';
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-slate-700/80 font-bold text-[11px] transition-colors cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                  <span>🔐 Admin Login (सुपर ॲडमिन) &rarr;</span>
+                </a>
               </li>
             </ul>
           </div>

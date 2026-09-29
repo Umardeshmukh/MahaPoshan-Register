@@ -67,7 +67,15 @@ import {
   HelpCircle,
   CheckCheck,
   Mail,
+  KeyRound,
+  Lock,
+  LogOut,
 } from 'lucide-react';
+import { AdminLoginModal } from './AdminLoginModal';
+import {
+  isAdminAuthenticated,
+  clearAdminAuthentication,
+} from '../lib/subscription-store';
 
 interface AdminSettingsViewProps {
   appData: AppData;
@@ -81,6 +89,7 @@ interface AdminSettingsViewProps {
   onRecalculateEntries?: (updatedEntries: Record<string, DailyRegisterEntry>) => void;
   onClearRegisterData?: () => void;
   onResetAllData?: () => void;
+  onOpenSuperAdmin?: () => void;
 }
 
 export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
@@ -95,6 +104,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   onRecalculateEntries,
   onClearRegisterData,
   onResetAllData,
+  onOpenSuperAdmin,
 }) => {
   // Extract or initialize the config node
   const activeConfig = useMemo(() => {
@@ -113,6 +123,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [activeTab, setActiveTab] = useState<'general' | 'menu' | 'rates' | 'config'>(initialTab);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [copiedConfig, setCopiedConfig] = useState<boolean>(false);
+  const [adminLoginModalOpen, setAdminLoginModalOpen] = useState<boolean>(false);
 
   // General Settings Form state
   const [generalForm, setGeneralForm] = useState<GeneralSettings>({
@@ -616,7 +627,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             }`}
           >
             <Settings className="w-4 h-4 text-amber-700" />
-            <span>सामान्य (General)</span>
+            <span>{language === 'en' ? 'Profile & General' : 'प्रोफाईल व सामान्य'}</span>
           </button>
 
           <button
@@ -1114,6 +1125,66 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 <span>poshanragister@gmail.com</span>
               </a>
             </div>
+            {/* 1.4 Admin Login Portal Card */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-amber-950 text-white border border-slate-700/80 rounded-2xl shadow-md p-5 sm:p-6 lg:col-span-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-6 h-6 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-white text-base">
+                        प्रशासक लॉगिन (Admin Login)
+                      </h4>
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-semibold">
+                        Authorized Only
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                      फक्त अधिकृत सुपर ॲडमिनसाठी. सर्व शाळा व्यवस्थापन, सदस्यत्व नियंत्रण, रेफरल रिवॉर्ड्स आणि सिस्टम मॉनिटरिंगसाठी क्रेडेंशियल्सने लॉगिन करा.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {isAdminAuthenticated() ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onOpenSuperAdmin) onOpenSuperAdmin();
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-white" />
+                        <span>कन्सोल उघडा (Open Console)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearAdminAuthentication();
+                          triggerToast('ॲडमिन सेशन लॉगआउट झाले.');
+                        }}
+                        className="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
+                        title="Sign Out of Admin"
+                      >
+                        <LogOut className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAdminLoginModalOpen(true)}
+                      className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-98 text-white font-bold text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      <span>ॲडमिन लॉगिन (Admin Login)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </form>
       )}
@@ -1570,8 +1641,10 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                   <input
                     type="number"
                     min="1"
+                    max="999"
+                    maxLength={3}
                     value={simStudents}
-                    onChange={(e) => setSimStudents(Math.max(1, parseInt(e.target.value, 10) || 0))}
+                    onChange={(e) => setSimStudents(Math.min(999, Math.max(1, parseInt(e.target.value.slice(0, 3), 10) || 1)))}
                     className="w-16 font-mono font-bold text-slate-900 focus:outline-none border-b border-amber-400 text-center"
                   />
                 </div>
@@ -2360,6 +2433,18 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Super Admin Login Modal */}
+      <AdminLoginModal
+        isOpen={adminLoginModalOpen}
+        onClose={() => setAdminLoginModalOpen(false)}
+        onLoginSuccess={() => {
+          setAdminLoginModalOpen(false);
+          if (onOpenSuperAdmin) {
+            onOpenSuperAdmin();
+          }
+        }}
+      />
     </div>
   );
 };

@@ -15,10 +15,13 @@ import {
   Check,
   X,
   Menu,
+  KeyRound,
 } from 'lucide-react';
 import { Show, SignInButton, UserButton } from '@clerk/react';
 import { SyncStatus } from '../lib/cloud-sync';
 import { Badge } from './ui';
+import { AdminLoginModal } from './AdminLoginModal';
+import { isAdminAuthenticated } from '../lib/subscription-store';
 
 
 interface HeaderProps {
@@ -49,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [adminLoginModalOpen, setAdminLoginModalOpen] = useState(false);
 
   return (
     <>
@@ -170,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
               >
                 <Settings className="w-4 h-4 text-amber-700" />
-                <span>{language === 'en' ? 'Settings' : 'सेटिंग्ज व मेन्यू'}</span>
+                <span>{language === 'en' ? 'Profile & Settings' : 'प्रोफाईल व सेटिंग्ज'}</span>
               </button>
             </nav>
 
@@ -237,16 +241,21 @@ export const Header: React.FC<HeaderProps> = ({
               </Show>
               <Show when="signed-in">
                 <div className="flex items-center gap-2">
-                  {isSuperAdmin && onOpenSuperAdmin && (
-                    <button
-                      type="button"
-                      onClick={onOpenSuperAdmin}
-                      className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-[10px] border border-amber-500/40 cursor-pointer shadow-xs"
-                      title="Super Admin कन्सोल उघडा"
-                    >
-                      <span>⚡ Super Admin</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if ((isSuperAdmin || isAdminAuthenticated()) && onOpenSuperAdmin) {
+                        onOpenSuperAdmin();
+                      } else {
+                        setAdminLoginModalOpen(true);
+                      }
+                    }}
+                    className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-xs border border-amber-500/40 cursor-pointer shadow-xs transition-colors"
+                    title="प्रशासक लॉगिन (Admin Login)"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{isSuperAdmin || isAdminAuthenticated() ? 'Super Admin' : 'Admin Login'}</span>
+                  </button>
 
 
                   {onOpenReferral && (
@@ -428,7 +437,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   <Settings className="w-4 h-4 text-amber-700 shrink-0" />
-                  <span>सेटिंग्ज व मेन्यू (Settings)</span>
+                  <span>{language === 'en' ? 'Profile & Settings' : 'प्रोफाईल व सेटिंग्ज'}</span>
                 </button>
               </div>
 
@@ -502,18 +511,21 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>संपर्क व ग्राहक सेवा</span>
                 </button>
 
-                {isSuperAdmin && onOpenSuperAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    if ((isSuperAdmin || isAdminAuthenticated()) && onOpenSuperAdmin) {
                       onOpenSuperAdmin();
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900 text-amber-300 text-xs font-bold border border-amber-500/40 cursor-pointer"
-                  >
-                    <span>⚡ Super Admin Console</span>
-                  </button>
-                )}
+                    } else {
+                      setAdminLoginModalOpen(true);
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 text-xs font-bold border border-amber-500/40 cursor-pointer shadow-xs transition-colors"
+                >
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span>{isSuperAdmin || isAdminAuthenticated() ? '⚡ Super Admin Console' : '🔐 ॲडमिन लॉगिन (Admin Login)'}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -692,6 +704,18 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       )}
+
+      {/* Super Admin Login Modal */}
+      <AdminLoginModal
+        isOpen={adminLoginModalOpen}
+        onClose={() => setAdminLoginModalOpen(false)}
+        onLoginSuccess={() => {
+          setAdminLoginModalOpen(false);
+          if (onOpenSuperAdmin) {
+            onOpenSuperAdmin();
+          }
+        }}
+      />
     </>
   );
 };

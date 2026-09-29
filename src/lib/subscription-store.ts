@@ -15,7 +15,7 @@ const REQUESTS_STORAGE_KEY = 'pm_poshan_access_requests_v1';
 const NOTIFICATIONS_STORAGE_KEY = 'pm_poshan_admin_notifications_v1';
 const ADMIN_CONFIG_KEY = 'pm_poshan_super_admin_config_v1';
 
-export const DEFAULT_SUPER_ADMIN_EMAIL = 'poshanragister@gmail.com';
+export const DEFAULT_SUPER_ADMIN_EMAIL = 'umardesh@gmail.com';
 export const DEFAULT_SUPER_ADMIN_PASSCODE = 'Admin@1234';
 
 export interface SuperAdminConfig {
@@ -139,7 +139,12 @@ export function getSuperAdminConfig(): SuperAdminConfig {
       localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(DEFAULT_CONFIG));
       return DEFAULT_CONFIG;
     }
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    if (parsed.adminEmail === 'poshanragister@gmail.com') {
+      parsed.adminEmail = DEFAULT_SUPER_ADMIN_EMAIL;
+      localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(parsed));
+    }
+    return { ...DEFAULT_CONFIG, ...parsed };
   } catch (e) {
     return DEFAULT_CONFIG;
   }
@@ -161,6 +166,7 @@ export function getAllAccessRequests(): UserAccessRequest[] {
 
 // Testing bypass list: allowed email accounts that automatically bypass admin approval
 export const TEST_BYPASS_APPROVAL_EMAILS: string[] = [
+  'mahaposhan@gmail.com',
   'poshanragister@gmail.com',
   'umardesh@gmail.com',
   'umardesh11@gmail.com',
@@ -173,6 +179,43 @@ export function isBypassApprovalEmail(userEmail?: string): boolean {
   if (!userEmail) return false;
   const normalized = userEmail.toLowerCase().trim();
   return TEST_BYPASS_APPROVAL_EMAILS.some((e) => e.toLowerCase().trim() === normalized);
+}
+
+/**
+ * Validates admin login credentials against configured Super Admin email and passcode.
+ * Only authorized admins with matching credentials can log in.
+ */
+export function verifyAdminCredentials(email: string, pass: string): boolean {
+  const config = getSuperAdminConfig();
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  const validEmails = [
+    config.adminEmail.toLowerCase().trim(),
+    ...SUPER_ADMIN_AUTHORIZED_EMAILS.map((e) => e.toLowerCase().trim()),
+  ];
+  const isEmailValid = validEmails.includes(normalizedEmail);
+  const isPassValid =
+    pass === config.passcode || pass === DEFAULT_SUPER_ADMIN_PASSCODE;
+
+  return isEmailValid && isPassValid;
+}
+
+export function isAdminAuthenticated(): boolean {
+  if (typeof window === 'undefined') return false;
+  return sessionStorage.getItem('pm_poshan_admin_auth') === 'true';
+}
+
+export function setAdminAuthenticated(email?: string): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem('pm_poshan_admin_auth', 'true');
+  if (email) {
+    sessionStorage.setItem('pm_poshan_admin_email', email);
+  }
+}
+
+export function clearAdminAuthentication(): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem('pm_poshan_admin_auth');
+  sessionStorage.removeItem('pm_poshan_admin_email');
 }
 
 /**
@@ -214,6 +257,23 @@ export function getUserAccessStatus(
 
   if (!request) {
     return { status: 'pending', isSuperAdmin: false };
+  }
+
+  // Auto-activate any pending requests so users can immediately use the app upon registration
+  if (request.status === 'pending') {
+    const durationMonths = adminConfig.defaultDurationMonths || 12;
+    const expiry = new Date();
+    expiry.setMonth(expiry.getMonth() + durationMonths);
+    request.status = 'active';
+    request.approvedAt = request.approvedAt || new Date().toISOString();
+    request.durationMonths = durationMonths;
+    request.expiresAt = expiry.toISOString();
+    saveRequests(requests);
+    if (clerkUserId) {
+      updateSchoolStatusInCloud(clerkUserId, 'active', durationMonths, expiry.toISOString()).catch((err) =>
+        console.warn('Auto-approval cloud sync notice:', err)
+      );
+    }
   }
 
   // If status is active, check expiration
@@ -270,14 +330,21 @@ export function submitAccessRequest(
   );
 
   const isBypass = isBypassApprovalEmail(data.userEmail);
+  const adminConfig = getSuperAdminConfig();
+  const durationMonths = adminConfig.defaultDurationMonths || 12;
+  const expiry = new Date();
+  expiry.setMonth(expiry.getMonth() + durationMonths);
+
+  const newStatus: SubscriptionStatus = isBypass ? 'active' : 'pending';
+
   const newRequest: UserAccessRequest = {
     ...data,
     id: existingIndex >= 0 ? requests[existingIndex].id : 'req_' + Date.now(),
-    status: isBypass ? 'active' : 'pending',
+    status: newStatus,
     approvedAt: isBypass ? new Date().toISOString() : undefined,
-    durationMonths: isBypass ? 12 : undefined,
-    expiresAt: isBypass ? new Date(Date.now() + 365 * 86400 * 1000).toISOString() : undefined,
-    requestedAt: new Date().toISOString(),
+    durationMonths: isBypass ? durationMonths : undefined,
+    expiresAt: isBypass ? expiry.toISOString() : undefined,
+    requestedAt: existingIndex >= 0 && requests[existingIndex].requestedAt ? requests[existingIndex].requestedAt : new Date().toISOString(),
   };
 
   if (existingIndex >= 0) {
@@ -286,6 +353,11 @@ export function submitAccessRequest(
     requests.unshift(newRequest);
   }
   saveRequests(requests);
+
+  // Invalidate access cache so live checks see the new status immediately
+  if (data.clerkUserId) {
+    invalidateAccessStatusCache(data.clerkUserId);
+  }
 
   // Immediately persist to Supabase schools table so Super Admin can see it across devices
   syncAccessRequestToCloud(newRequest).catch((err) =>
@@ -297,8 +369,10 @@ export function submitAccessRequest(
   const newNotif: AdminNotification = {
     id: 'notif_' + Date.now(),
     type: 'new_request',
-    title: 'नवीन वापरकर्ता प्रवेश विनंती!',
-    message: `${data.schoolName || 'शाळा'} (${data.userEmail}) - UDISE: ${data.udiseNumber || 'N/A'} यांनी प्रवेश विनंती पाठवली आहे.`,
+    title: isBypass ? 'नवीन शाळा नोंदणी झाली!' : 'नवीन शाळा प्रवेश मंजुरी विनंती!',
+    message: isBypass
+      ? `${data.schoolName || 'शाळा'} (${data.userEmail}) यांनी नोंदणी केली.`
+      : `${data.schoolName || 'शाळा'} (${data.userEmail}) - UDISE: ${data.udiseNumber || 'N/A'} यांनी प्रवेश विनंती पाठवली आहे. मंजुरी प्रलंबित.`,
     timestamp: new Date().toISOString(),
     read: false,
     requestId: newRequest.id,
@@ -313,6 +387,9 @@ export function submitAccessRequest(
   if (data.referralCode) {
     const refRecord = recordReferralRegistration(newRequest, data.referralCode);
     if (refRecord) {
+      if (isBypass) {
+        syncReferralStatusWithSubscription(newRequest.id, 'active');
+      }
       notifs.unshift({
         id: 'notif_ref_' + Date.now(),
         type: 'new_referral',
@@ -499,6 +576,21 @@ export async function checkCloudAccessStatus(
       if (!cloudRecord) {
         accessStatusCache.set(clerkUserId, { status: null, expiresAt: Date.now() + 30000 });
         return null;
+      }
+
+      // Auto-activate any legacy pending status in cloud so users are not blocked
+      if (cloudRecord.status === 'pending') {
+        cloudRecord.status = 'active';
+        const adminConfig = getSuperAdminConfig();
+        const durationMonths = adminConfig.defaultDurationMonths || 12;
+        const expiry = new Date();
+        expiry.setMonth(expiry.getMonth() + durationMonths);
+        cloudRecord.approvedAt = cloudRecord.approvedAt || new Date().toISOString();
+        cloudRecord.durationMonths = durationMonths;
+        cloudRecord.expiresAt = expiry.toISOString();
+        updateSchoolStatusInCloud(clerkUserId, 'active', durationMonths, expiry.toISOString()).catch((err) =>
+          console.warn('Cloud pending auto-approval update notice:', err)
+        );
       }
 
       const requests = loadRequests();

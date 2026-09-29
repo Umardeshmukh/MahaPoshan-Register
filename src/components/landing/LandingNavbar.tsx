@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useUser, SignInButton, SignUpButton } from '@clerk/react';
-import { Sparkles, Menu, X, ArrowRight, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Sparkles, Menu, X, ArrowRight, ShieldCheck, ChevronRight, KeyRound } from 'lucide-react';
 
 interface LandingNavbarProps {
   onOpenLegal?: (tab: 'terms' | 'privacy' | 'refund' | 'contact') => void;
@@ -78,6 +78,20 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onOpenLegal }) => 
 
           {/* Desktop Right CTAs */}
           <div className="hidden sm:flex items-center gap-2.5">
+            {/* Admin Login Quick Link */}
+            <a
+              href="#super-admin"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.hash = '#super-admin';
+              }}
+              className="px-3 py-1.5 rounded-xl border border-slate-200/90 hover:border-amber-500 bg-white/80 hover:bg-amber-50/80 text-slate-700 hover:text-amber-900 font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer group"
+              title="Super Admin Portal (पासकोड किंवा ॲडमिन ईमेलने प्रवेश करा)"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
+              <span>Admin Login</span>
+            </a>
+
             {isSignedIn ? (
               <a
                 href="#"
@@ -170,6 +184,19 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onOpenLegal }) => 
           </nav>
 
           <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+            <a
+              href="#super-admin"
+              onClick={(e) => {
+                e.preventDefault();
+                setMobileMenuOpen(false);
+                window.location.hash = '#super-admin';
+              }}
+              className="w-full py-2.5 px-3 rounded-xl border border-amber-300 bg-amber-50/90 text-amber-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              <KeyRound className="w-4 h-4 text-amber-700" />
+              <span>🔐 ॲडमिन लॉगिन (Admin Login)</span>
+            </a>
+
             <SignUpButton mode="modal">
               <button
                 type="button"

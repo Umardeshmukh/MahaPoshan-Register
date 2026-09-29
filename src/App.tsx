@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   AppData,
   DailyRegisterEntry,
@@ -108,6 +108,19 @@ export default function App() {
       window.removeEventListener('popstate', handleLocationChange);
     };
   }, []);
+
+  // Auto-route to Super Admin Panel when logging in as mahaposhan@gmail.com
+  const hasAutoRoutedAdminRef = useRef(false);
+  useEffect(() => {
+    if (isSignedIn && user?.primaryEmailAddress?.emailAddress) {
+      const email = user.primaryEmailAddress.emailAddress.toLowerCase().trim();
+      if (email === 'mahaposhan@gmail.com' && !hasAutoRoutedAdminRef.current) {
+        hasAutoRoutedAdminRef.current = true;
+        setIsSuperAdminRoute(true);
+        window.location.hash = '#super-admin';
+      }
+    }
+  }, [isSignedIn, user?.primaryEmailAddress?.emailAddress]);
 
   // Sync to local storage whenever appData updates
   useEffect(() => {
@@ -450,6 +463,18 @@ export default function App() {
         initialRequest={accessStatus.request}
         status={accessStatus.status}
         onRefresh={() => setAccessRefreshTrigger((c) => c + 1)}
+        onSuccess={(profileData) => {
+          setAppData((prev) => {
+            const updatedProfile: SchoolProfile = {
+              ...prev.profile,
+              ...profileData,
+            };
+            const updated = { ...prev, profile: updatedProfile };
+            saveAppData(updated);
+            return updated;
+          });
+          setAccessRefreshTrigger((c) => c + 1);
+        }}
       />
     );
   }
@@ -512,6 +537,10 @@ export default function App() {
             onRecalculateEntries={handleRecalculateEntries}
             onClearRegisterData={handleClearRegisterData}
             onResetAllData={handleResetAllData}
+            onOpenSuperAdmin={() => {
+              window.location.hash = '#super-admin';
+              setIsSuperAdminRoute(true);
+            }}
           />
         )}
 

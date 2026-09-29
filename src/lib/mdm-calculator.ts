@@ -24,7 +24,7 @@ export function calculateDayConsumption(
   recipe: DishRecipe,
   allIngredients: Ingredient[]
 ): DailyCalculationResult {
-  const validStudents = Math.max(0, Number(students) || 0);
+  const validStudents = Math.min(999, Math.max(0, Number(students) || 0));
   const items: ItemConsumption[] = [];
 
   let totalGrainsPulsesKg = 0;

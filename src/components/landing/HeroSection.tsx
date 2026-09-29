@@ -85,7 +85,7 @@ export const HeroSection: React.FC = () => {
   }, []);
 
   const handleAdjustCount = (delta: number) => {
-    setStudentCount((prev) => Math.max(1, prev + delta));
+    setStudentCount((prev) => Math.min(999, Math.max(1, prev + delta)));
   };
 
   const handleScrollToWorkflow = () => {
