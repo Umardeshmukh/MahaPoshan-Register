@@ -39,12 +39,14 @@ interface AccessPendingViewProps {
   initialRequest?: UserAccessRequest;
   status: SubscriptionStatus;
   onRefresh: () => void;
+  onSuccess?: (schoolData: Partial<SchoolProfile>) => void;
 }
 
 export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
   initialRequest,
   status,
   onRefresh,
+  onSuccess,
 }) => {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -139,32 +141,35 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
         privacyPolicyVersion: CURRENT_PRIVACY_VERSION,
       });
 
+      const schoolProfileData = {
+        schoolName,
+        udiseNumber,
+        centerCluster,
+        standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
+        district,
+        taluka: '',
+        headmasterName: userName,
+        inchargeTeacher: '',
+        cookName: '',
+      };
+
       // Also persist profile to Supabase schools table
       await syncSchoolProfileToCloud(
-        {
-          schoolName,
-          udiseNumber,
-          centerCluster,
-          standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
-          district,
-          taluka: '',
-          headmasterName: userName,
-          inchargeTeacher: '',
-          cookName: '',
-        },
+        schoolProfileData,
         clerkUserId,
         userEmail,
         userName
       ).catch((err) => console.warn('Supabase profile sync background notice:', err));
 
+      if (onSuccess) {
+        onSuccess(schoolProfileData);
+      }
       setSubmittedSuccess(true);
-      setTimeout(() => {
-        onRefresh();
-      }, 600);
+      onRefresh();
 
     } catch (err) {
       console.error(err);
-      alert('विनंती सादर करताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.');
+      alert('नोंदणी करताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.');
     } finally {
       setIsSubmitting(false);
     }
@@ -174,9 +179,9 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
     if (!initialRequest) return;
     submitAccessRequest({
       ...initialRequest,
-      notes: 'सदस्यत्व नूतनीकरण विनंती (Renewal Request)',
+      notes: 'सदस्यत्व नूतनीकरण (Renewal Request)',
     });
-    alert('नूतनीकरणाची विनंती ॲडमिनकडे पाठवली आहे.');
+    alert('सदस्यत्व नूतनीकरणाची विनंती Super Admin (umardesh@gmail.com) कडे पाठवण्यात आली आहे. मंजुरी मिळताच आपले खाते सक्रिय होईल.');
     onRefresh();
   };
 
@@ -293,23 +298,49 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                 </button>
               </div>
             </div>
+          ) : status === 'rejected' ? (
+            <div className="text-center">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center mb-4">
+                <ShieldAlert className="w-7 h-7 text-rose-700" />
+              </div>
+              <span className="inline-block px-3 py-1 rounded-full bg-rose-100 text-rose-900 font-semibold text-xs mb-2">
+                प्रवेश विनंती नाकारली (Access Request Rejected)
+              </span>
+              <h2 className="text-xl font-bold text-slate-900">
+                आपली नोंदणी विनंती मंजूर झालेली नाही
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-lg mx-auto">
+                {initialRequest?.notes
+                  ? `कारण: ${initialRequest.notes}`
+                  : 'प्रशासकीय खातरजमा पूर्ण न झाल्याने ही विनंती नाकारण्यात आली आहे.'}
+              </p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSubmittedSuccess(false)}
+                  className="px-5 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>माहिती सुधारून पुन्हा सादर करा</span>
+                </button>
+              </div>
+            </div>
           ) : hasSubmitted ? (
             <div className="text-center">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center mb-4">
-                <Clock className="w-7 h-7 text-amber-700 animate-spin-slow" />
+                <Clock className="w-7 h-7 text-amber-700 animate-pulse" />
               </div>
 
               <span className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 font-semibold text-xs mb-2">
-                प्रवेश मंजुरी प्रक्रियेत आहे (Approval Pending)
+                प्रवेश मंजुरी प्रलंबित (Approval Pending)
               </span>
 
               <h2 className="text-xl font-bold text-slate-900">
-                आपली विनंती ॲडमिन मंजुरीच्या प्रतीक्षेत आहे
+                आपली शाळा नोंदणी विनंती पाठवली आहे!
               </h2>
 
               <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-lg mx-auto leading-relaxed">
-                आपली शाळा नोंदणी विनंती यशस्वीरीत्या प्राप्त झाली आहे.
-                सुपर ॲडमिनद्वारे खातरजमा करून सदस्यत्व कालावधी मंजूर केल्यावर आपले खाते त्वरित सुरू होईल.
+                आपल्या शाळेची माहिती सुपर ॲडमिन (<strong className="text-slate-800 font-semibold">umardesh@gmail.com</strong>) कडे मंजुरीसाठी पाठवण्यात आली आहे. खातरजमा करून मंजुरी दिल्यावर आपले खाते त्वरित सुरू होईल.
               </p>
 
               {/* Submitted Details Box */}
@@ -343,6 +374,14 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                     <span className="text-slate-500">ईमेल:</span>
                     <span className="font-medium text-slate-900">{initialRequest.userEmail}</span>
                   </div>
+
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-500">स्थिती:</span>
+                    <span className="inline-flex items-center gap-1 font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                      <Clock className="w-3 h-3 text-amber-700" />
+                      प्रशासकीय मंजुरीची प्रतीक्षा (Pending Approval)
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -351,25 +390,28 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                 <button
                   type="button"
                   onClick={onRefresh}
-                  className="px-5 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center gap-2"
+                  className="px-6 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-md shadow-amber-700/20 transition-colors cursor-pointer flex items-center gap-2"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  <span>स्थिती अपडेट करा (Check Status)</span>
+                  <span>स्थिती तपासा (Check Live Approval Status)</span>
                 </button>
               </div>
 
               {/* Support & Admin Contact Card */}
-              <div className="mt-5 p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl text-center max-w-md mx-auto">
-                <p className="text-xs text-amber-900 font-semibold flex items-center justify-center gap-1.5">
+              <div className="mt-5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-center max-w-md mx-auto">
+                <p className="text-xs text-slate-700 font-semibold flex items-center justify-center gap-1.5">
                   <Mail className="w-3.5 h-3.5 text-amber-700" />
-                  <span>मदत व संपर्क (Admin & Support Contact):</span>
+                  <span>सुपर ॲडमिन संपर्क (Admin Alert Sent To):</span>
                 </p>
                 <a
-                  href="mailto:poshanragister@gmail.com"
+                  href="mailto:umardesh@gmail.com"
                   className="font-mono text-xs font-bold text-amber-950 underline hover:text-amber-800 mt-1 inline-block"
                 >
-                  poshanragister@gmail.com
+                  umardesh@gmail.com
                 </a>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  प्रणाली दर १० सेकंदांनी स्वयंचलितपणे मंजुरी तपासत आहे. मंजुरी मिळताच ॲप आपोआप सुरू होईल.
+                </p>
               </div>
             </div>
           ) : (
@@ -379,10 +421,10 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                   <Building2 className="w-6 h-6 text-amber-700" />
                 </div>
                 <h2 className="text-xl font-bold text-slate-900">
-                  शाळा तपशील नोंदवा व प्रवेश विनंती करा
+                  शाळा तपशील नोंदवा व ॲप सुरू करा
                 </h2>
                 <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                  आपल्या शाळेचे PM POSHAN दैनिक हिशोब सुरू करण्यासाठी खालील माहिती भरून ॲडमिनकडे विनंती सादर करा.
+                  आपल्या शाळेचे PM POSHAN दैनिक हिशोब सुरू करण्यासाठी खालील माहिती भरा आणि लगेच ॲप वापरणे सुरू करा.
                 </p>
               </div>
 
@@ -550,7 +592,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                     className="w-full py-2.5 px-4 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md shadow-amber-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <Send className="w-4 h-4" />
-                    <span>{isSubmitting ? 'पाठवत आहे...' : 'प्रवेश विनंती पाठवा (Submit Request)'}</span>
+                    <span>{isSubmitting ? 'नोंदणी होत आहे...' : 'शाळा नोंदणी करा व ॲप सुरू करा (Register & Start App)'}</span>
                   </button>
                   {!agreedToLegal && (
                     <p className="text-[11px] text-center text-amber-800 mt-1.5 font-medium">

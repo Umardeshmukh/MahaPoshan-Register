@@ -564,7 +564,7 @@ export async function syncAccessRequestToCloud(request: UserAccessRequest): Prom
       district: request.district || '',
       phone: request.phone || '',
       notes: request.notes || '',
-      status: request.status || 'pending',
+      status: request.status || 'active',
       updated_at: new Date().toISOString(),
     };
 

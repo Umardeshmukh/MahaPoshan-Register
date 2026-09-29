@@ -198,10 +198,16 @@ export async function sendSchoolRegistrationAlert(
             </tr>
           </table>
 
-          <div style="text-align: center;">
-            <a href="${appUrl}" class="btn">
+          <div style="text-align: center; margin-top: 24px;">
+            <a href="${appUrl}" class="btn" style="display: inline-block; background: #d97706; color: #ffffff !important; text-decoration: none; padding: 12px 28px; font-weight: bold; border-radius: 10px; font-size: 14px;">
               ⚡ Super Admin पॅनलवर मंजुरी द्या
             </a>
+            <p style="margin-top: 14px; font-size: 12px; color: #64748b; word-break: break-all;">
+              किंवा थेट लिंकवर जा: <a href="${appUrl}" style="color: #d97706; font-weight: 600;">${appUrl}</a>
+            </p>
+            <p style="margin-top: 4px; font-size: 11px; color: #94a3b8;">
+              (ॲडमिन ईमेल: umardesh@gmail.com • पासकोड: Admin@1234)
+            </p>
           </div>
         </div>
 
@@ -214,7 +220,7 @@ export async function sendSchoolRegistrationAlert(
   `.trim();
 
   return sendEmail({
-    to: 'poshanragister@gmail.com',
+    to: 'umardesh@gmail.com',
     subject: `[MahaPoshan] ${title}: ${request.schoolName} (${request.udiseNumber})`,
     html,
   });
@@ -290,7 +296,7 @@ export async function sendApprovalConfirmationEmail(params: {
 /**
  * Dispatches a test email to verify the Resend connection.
  */
-export async function sendTestEmail(toEmail: string = 'poshanragister@gmail.com'): Promise<SendEmailResponse> {
+export async function sendTestEmail(toEmail: string = 'umardesh@gmail.com'): Promise<SendEmailResponse> {
   const html = `
     <div style="font-family: sans-serif; padding: 20px; color: #1e293b;">
       <h2 style="color: #92400e;">⚡ MahaPoshan Register • Resend Email चाचणी</h2>

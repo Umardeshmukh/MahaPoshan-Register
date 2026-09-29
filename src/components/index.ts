@@ -14,5 +14,6 @@ export * from './SuperAdminPanel';
 export * from './AuthLandingView';
 export * from './AccessPendingView';
 export * from './LegalModal';
+export * from './AdminLoginModal';
 export * from './ReferralCard';
 export * from './features/daily/DailyIngredientsTable';

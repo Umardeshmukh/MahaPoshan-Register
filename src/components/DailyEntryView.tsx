@@ -189,7 +189,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
   }, [dailyEntries]);
 
   const adjustStudents = (delta: number) => {
-    setStudentCount((prev) => Math.max(0, prev + delta));
+    setStudentCount((prev) => Math.min(999, Math.max(0, prev + delta)));
   };
 
   return (
@@ -373,10 +373,13 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                         id="student-count-input"
                         type="number"
                         min="0"
+                        max="999"
+                        maxLength={3}
                         value={studentCount === 0 ? '' : studentCount}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          setStudentCount(isNaN(val) ? 0 : Math.max(0, val));
+                          const raw = e.target.value.slice(0, 3);
+                          const val = parseInt(raw, 10);
+                          setStudentCount(isNaN(val) ? 0 : Math.min(999, Math.max(0, val)));
                         }}
                         placeholder="0"
                         className="w-full h-14 sm:h-16 bg-slate-50 border-2 border-amber-300 rounded-2xl pl-12 sm:pl-14 pr-16 sm:pr-20 text-2xl sm:text-3xl font-black text-slate-900 tracking-tight focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-600 transition-all"

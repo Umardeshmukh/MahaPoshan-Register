@@ -24,6 +24,7 @@ import {
   DEFAULT_SUPER_ADMIN_PASSCODE,
   syncAllRequestsFromCloud,
   SUPER_ADMIN_AUTHORIZED_EMAILS,
+  verifyAdminCredentials,
 } from '../lib/subscription-store';
 import {
   getAllReferrals,
@@ -99,6 +100,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     }
     return false;
   });
+  const [adminEmailInput, setAdminEmailInput] = useState(currentUserEmail || '');
   const [passcode, setPasscode] = useState('');
   const [authError, setAuthError] = useState('');
 
@@ -237,12 +239,19 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const currentConfig = getSuperAdminConfig();
-    if (passcode === currentConfig.passcode || passcode === DEFAULT_SUPER_ADMIN_PASSCODE) {
+    const emailToTest = adminEmailInput.trim() || currentUserEmail || '';
+    const isCredValid = verifyAdminCredentials(emailToTest, passcode.trim());
+
+    if (
+      isCredValid ||
+      passcode.trim() === currentConfig.passcode ||
+      passcode.trim() === DEFAULT_SUPER_ADMIN_PASSCODE
+    ) {
       sessionStorage.setItem('pm_poshan_admin_auth', 'true');
       setIsAuthenticated(true);
       setAuthError('');
     } else {
-      setAuthError('Invalid Admin Passcode');
+      setAuthError('अवैध ॲडमिन क्रेडेंशियल्स (Invalid Admin Credentials)! फक्त अधिकृत प्रशासकच योग्य आयडी व पासकोडने प्रवेश करू शकतात.');
     }
   };
 
@@ -401,14 +410,29 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Super Admin Secret Passcode
+                ॲडमिन ईमेल (Admin Email)
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="poshanragister@gmail.com"
+                value={adminEmailInput}
+                onChange={(e) => setAdminEmailInput(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                ॲडमिन पासकोड (Admin Passcode)
               </label>
               <input
                 type="password"
                 required
+                placeholder="••••••••"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-mono"
               />
               {authError && (
                 <p className="text-xs text-rose-400 mt-1.5 font-medium">{authError}</p>
