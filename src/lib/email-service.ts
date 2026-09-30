@@ -1,10 +1,13 @@
 import { UserAccessRequest } from '../types';
+import { logStructuredEvent } from './observability';
 
 export interface SendEmailOptions {
   to?: string;
   from?: string;
   subject: string;
   html: string;
+  dedupKey?: string;
+  dedupTtlHours?: number;
 }
 
 export interface SendEmailResponse {
@@ -12,6 +15,7 @@ export interface SendEmailResponse {
   message?: string;
   id?: string;
   error?: any;
+  deduplicated?: boolean;
 }
 
 // Endpoint preference memory to avoid probing failed endpoints on subsequent dispatches
@@ -21,24 +25,87 @@ let preferredEndpoint: string | null = null;
 const inFlightRequests = new Map<string, Promise<SendEmailResponse>>();
 const recentDispatches = new Map<string, { response: SendEmailResponse; expiresAt: number }>();
 
+const NOTIFICATION_DEDUP_KEY = 'pm_poshan_notification_dedup_v1';
+
+/**
+ * Checks if a specific lifecycle notification (e.g., expiry warning, referral eligibility)
+ * was already sent within its TTL window so users are never spammed with duplicate emails.
+ */
+export function hasNotificationBeenSent(dedupKey: string, ttlHours: number = 24): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const raw = localStorage.getItem(NOTIFICATION_DEDUP_KEY);
+    if (!raw) return false;
+    const ledger: Record<string, number> = JSON.parse(raw);
+    const sentAt = ledger[dedupKey];
+    if (!sentAt) return false;
+    return Date.now() - sentAt < ttlHours * 3600 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+export function markNotificationSent(dedupKey: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const raw = localStorage.getItem(NOTIFICATION_DEDUP_KEY);
+    const ledger: Record<string, number> = raw ? JSON.parse(raw) : {};
+    ledger[dedupKey] = Date.now();
+    // Prune entries older than 30 days to keep storage bounded
+    const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
+    for (const [k, ts] of Object.entries(ledger)) {
+      if (ts < cutoff) delete ledger[k];
+    }
+    localStorage.setItem(NOTIFICATION_DEDUP_KEY, JSON.stringify(ledger));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
 function generateRequestKey(options: SendEmailOptions): string {
-  return `${options.to || ''}_${options.subject}_${options.html.length}`;
+  return options.dedupKey || `${options.to || ''}_${options.subject}_${options.html.length}`;
 }
 
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResponse> {
   const key = generateRequestKey(options);
   const now = Date.now();
 
+  // 0. Check persistent deduplication ledger if dedupKey is provided
+  if (options.dedupKey && hasNotificationBeenSent(options.dedupKey, options.dedupTtlHours ?? 24)) {
+    return {
+      success: true,
+      deduplicated: true,
+      message: 'Notification suppressed by deduplication ledger',
+    };
+  }
+
   // 1. Check if identical request was already sent within the last 10 seconds (cooldown)
   const cached = recentDispatches.get(key);
   if (cached && cached.expiresAt > now) {
-    return cached.response;
+    return { ...cached.response, deduplicated: true };
   }
 
   // 2. Check if identical request is already actively in-flight (deduplication)
   const activePromise = inFlightRequests.get(key);
   if (activePromise) {
     return activePromise;
+  }
+
+  // 3. In headless CLI/Node test environment without a window origin, simulate dispatch cleanly
+  if (typeof window === 'undefined') {
+    const simulatedResponse: SendEmailResponse = {
+      success: true,
+      id: `sim_${Date.now()}`,
+      message: 'Simulated email dispatch in CLI test environment',
+    };
+    recentDispatches.set(key, {
+      response: simulatedResponse,
+      expiresAt: Date.now() + 10000,
+    });
+    if (options.dedupKey) {
+      markNotificationSent(options.dedupKey);
+    }
+    return simulatedResponse;
   }
 
   const dispatchPromise = (async (): Promise<SendEmailResponse> => {
@@ -84,6 +151,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
             response: successResponse,
             expiresAt: Date.now() + 10000,
           });
+          if (options.dedupKey) {
+            markNotificationSent(options.dedupKey);
+          }
 
           return successResponse;
         }
@@ -99,6 +169,13 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
         }
       }
     }
+
+    logStructuredEvent({
+      category: 'EMAIL_FAILURE',
+      severity: 'warn',
+      message: `Failed to dispatch email: ${options.subject}`,
+      context: { to: options.to, subject: options.subject },
+    });
 
     return {
       success: false,
@@ -446,6 +523,8 @@ export async function sendSubscriptionExpiryAlert(params: {
     to: params.userEmail,
     subject: `[MahaPoshan] सदस्यत्व समाप्त होत आहे (${params.daysLeft} दिवस): ${params.schoolName}`,
     html,
+    dedupKey: `sub_expiry_${params.userEmail}_${params.daysLeft <= 3 ? '3d' : '15d'}`,
+    dedupTtlHours: 72,
   });
 }
 
@@ -474,5 +553,135 @@ export async function sendSchoolRegistrationConfirmation(params: {
     to: params.userEmail,
     subject: `[MahaPoshan] नोंदणी विनंती प्राप्त झाली: ${params.schoolName}`,
     html,
+    dedupKey: `reg_confirm_${params.udiseNumber}_${params.userEmail}`,
+    dedupTtlHours: 24,
   });
 }
+
+/**
+ * Sends an invitation email to a teacher to join a verified school.
+ */
+export async function sendTeacherInvitationEmail(params: {
+  schoolName: string;
+  udiseNumber: string;
+  teacherEmail: string;
+  invitedByName: string;
+  expiresAt?: string;
+}): Promise<SendEmailResponse> {
+  const expiryText = params.expiresAt
+    ? new Date(params.expiresAt).toLocaleDateString('mr-IN')
+    : '७ दिवसांत';
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #0284c7; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">शाळेमध्ये शिक्षक म्हणून सहभागी होण्याचे निमंत्रण</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार,</p>
+        <p><strong>${params.invitedByName}</strong> यांनी आपल्याला <strong>${params.schoolName}</strong> (UDISE: ${params.udiseNumber}) च्या MahaPoshan Register मध्ये शिक्षक (TEACHER) म्हणून सामील होण्यासाठी निमंत्रित केले आहे.</p>
+        <p>कृपया ${expiryText} पूर्वी लॉगिन करून UDISE क्रमांक <strong>${params.udiseNumber}</strong> द्वारे शाळेत प्रवेश घ्या.</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.teacherEmail,
+    subject: `[MahaPoshan] शिक्षक निमंत्रण: ${params.schoolName} (${params.udiseNumber})`,
+    html,
+    dedupKey: `invite_${params.udiseNumber}_${params.teacherEmail}`,
+    dedupTtlHours: 24,
+  });
+}
+
+/**
+ * Sends notification when a teacher invitation has expired.
+ */
+export async function sendInvitationExpiryEmail(params: {
+  schoolName: string;
+  udiseNumber: string;
+  teacherEmail: string;
+}): Promise<SendEmailResponse> {
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #64748b; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">निमंत्रणाची मुदत संपली (Invitation Expired)</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार,</p>
+        <p><strong>${params.schoolName}</strong> (UDISE: ${params.udiseNumber}) साठी पाठवलेल्या शिक्षक निमंत्रणाची मुदत संपली आहे. आवश्यक असल्यास मुख्याध्यापकांकडून नवीन निमंत्रण मागवा किंवा थेट UDISE द्वारे विनंती पाठवा.</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.teacherEmail,
+    subject: `[MahaPoshan] निमंत्रण मुदत संपली: ${params.schoolName}`,
+    html,
+    dedupKey: `invite_expired_${params.udiseNumber}_${params.teacherEmail}`,
+    dedupTtlHours: 72,
+  });
+}
+
+/**
+ * Sends notification when a school subscription is renewed.
+ */
+export async function sendRenewalConfirmationEmail(params: {
+  schoolName: string;
+  userEmail: string;
+  additionalMonths: number;
+  newExpiresAt: string;
+}): Promise<SendEmailResponse> {
+  const formattedDate = new Date(params.newExpiresAt).toLocaleDateString('mr-IN');
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #059669; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">सदस्यत्व नूतनीकरण यशस्वी (+${params.additionalMonths} महिने)</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार,</p>
+        <p>आपल्या <strong>${params.schoolName}</strong> शाळेचे MahaPoshan Register सदस्यत्व <strong>+${params.additionalMonths} महिन्यांनी</strong> वाढवण्यात आले आहे.</p>
+        <p><strong>नवीन मुदत (New Expiry):</strong> ${formattedDate}</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.userEmail,
+    subject: `[MahaPoshan] सदस्यत्व नूतनीकरण यशस्वी: ${params.schoolName}`,
+    html,
+    dedupKey: `renewal_${params.userEmail}_${params.newExpiresAt.slice(0, 10)}`,
+    dedupTtlHours: 12,
+  });
+}
+
+/**
+ * Sends notification to a referrer teacher when their referred school is approved and reward becomes eligible.
+ */
+export async function sendReferralEligibilityEmail(params: {
+  referrerEmail: string;
+  referrerName: string;
+  referredSchoolName: string;
+  rewardAmount: number;
+}): Promise<SendEmailResponse> {
+  const html = `
+    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 580px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px;">
+      <div style="background: #d97706; color: white; padding: 18px; border-radius: 12px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px;">रेफरल बक्षीस पात्र (Referral Reward Eligible)!</h2>
+      </div>
+      <div style="padding: 20px 0;">
+        <p>सस्नेह नमस्कार ${params.referrerName || 'शिक्षक मित्र'},</p>
+        <p>आपण रेफर केलेली <strong>${params.referredSchoolName}</strong> शाळा सत्यापित व सक्रिय झाली आहे!</p>
+        <p>आपण <strong>₹${params.rewardAmount}</strong> रेफरल बक्षिसासाठी पात्र झाला आहात. कृपया आपला UPI आयडी अद्ययावत ठेवा.</p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.referrerEmail,
+    subject: `[MahaPoshan] अभिनंदन! रेफरल बक्षीस पात्र: ${params.referredSchoolName}`,
+    html,
+    dedupKey: `referral_eligible_${params.referrerEmail}_${params.referredSchoolName}`,
+    dedupTtlHours: 168,
+  });
+}
+

@@ -5,6 +5,8 @@ import {
   UserAccessRequest,
   SubscriptionStatus,
 } from '../types';
+import { sendReferralEligibilityEmail } from './email-service';
+import { logStructuredEvent } from './observability';
 
 const REFERRAL_RECORDS_KEY = 'pm_poshan_referral_records_v1';
 const USER_REFERRAL_PROFILES_KEY = 'pm_poshan_user_referral_profiles_v1';
@@ -234,6 +236,47 @@ export function recordReferralRegistration(
     (p) => p.referralCode.toUpperCase() === normalizedCode
   );
 
+  // Prevent self-referral manipulation (same userId, same email, or same UDISE)
+  if (
+    referrer &&
+    ((request.clerkUserId && referrer.userId === request.clerkUserId) ||
+      (request.userEmail &&
+        referrer.userEmail &&
+        referrer.userEmail.toLowerCase().trim() === request.userEmail.toLowerCase().trim()) ||
+      (request.udiseNumber &&
+        referrer.udiseNumber &&
+        referrer.udiseNumber.trim() === request.udiseNumber.trim()))
+  ) {
+    logStructuredEvent({
+      category: 'SECURITY_VIOLATION',
+      severity: 'warn',
+      message: 'Self-referral attempt blocked during registration',
+      userId: request.clerkUserId,
+      context: { referralCode: normalizedCode, udise: request.udiseNumber },
+    });
+    return null;
+  }
+
+  const records = loadReferrals();
+  // Prevent duplicate referral manipulation if this UDISE is already eligible or paid
+  const existingIdx = records.findIndex(
+    (r) => r.referredUdise === request.udiseNumber
+  );
+  if (
+    existingIdx >= 0 &&
+    (records[existingIdx].rewardStatus === 'eligible' ||
+      records[existingIdx].rewardStatus === 'paid')
+  ) {
+    logStructuredEvent({
+      category: 'SECURITY_VIOLATION',
+      severity: 'warn',
+      message: 'Duplicate referral claim blocked for already eligible/paid school',
+      userId: request.clerkUserId,
+      context: { udise: request.udiseNumber, existingReferralId: records[existingIdx].id },
+    });
+    return records[existingIdx];
+  }
+
   const payouts = loadPayouts();
   const referrerPayout = referrer ? payouts[referrer.userId] : undefined;
 
@@ -259,11 +302,6 @@ export function recordReferralRegistration(
     adminNotes: `नोंदणीच्या वेळी ${normalizedCode} रेफरल कोड प्रविष्ट केला.`,
   };
 
-  const records = loadReferrals();
-  // Prevent duplicate referral for same UDISE
-  const existingIdx = records.findIndex(
-    (r) => r.referredUdise === request.udiseNumber
-  );
   if (existingIdx >= 0) {
     records[existingIdx] = { ...records[existingIdx], ...newRecord };
   } else {
@@ -421,6 +459,14 @@ export function syncReferralStatusWithSubscription(
       r.registrationStatus = newStatus;
       if (newStatus === 'active' && r.rewardStatus === 'pending') {
         r.rewardStatus = 'eligible'; // Eligible for manual payout
+        if (r.referrerEmail) {
+          sendReferralEligibilityEmail({
+            referrerEmail: r.referrerEmail,
+            referrerName: r.referrerName || 'सहकारी शिक्षक',
+            referredSchoolName: r.referredSchoolName,
+            rewardAmount: r.rewardAmount,
+          }).catch(() => {});
+        }
       } else if (newStatus === 'rejected') {
         r.rewardStatus = 'rejected';
       }

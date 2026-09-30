@@ -15,6 +15,7 @@ import {
   SchoolValidationDetails,
   StateTransitionAudit,
 } from '../types';
+import { logStructuredEvent } from './observability';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
 
@@ -27,15 +28,33 @@ const inFlightPullPromises = new Map<string, Promise<any>>();
 
 // Offline action queue stored in localStorage
 const OFFLINE_QUEUE_KEY = 'pm_poshan_offline_sync_queue_v1';
+const DEFAULT_MAX_RETRIES = 5;
 
-interface QueuedSyncAction {
+export interface QueuedSyncAction {
   type: 'daily_entry' | 'daily_delete' | 'stock_inward' | 'profile';
   payload: any;
   clerkUserId: string;
   timestamp: string;
+  idempotencyKey?: string;
+  retryCount?: number;
+  maxRetries?: number;
+  nextRetryAt?: number;
+  lastError?: string;
 }
 
-function getOfflineQueue(): QueuedSyncAction[] {
+export function buildSyncIdempotencyKey(
+  type: QueuedSyncAction['type'],
+  clerkUserId: string,
+  payload: any
+): string {
+  if (type === 'daily_entry') return `${clerkUserId}:daily_entry:${payload?.date || 'unknown'}`;
+  if (type === 'daily_delete') return `${clerkUserId}:daily_delete:${String(payload)}`;
+  if (type === 'stock_inward') return `${clerkUserId}:stock_inward:${payload?.monthKey || 'unknown'}`;
+  if (type === 'profile') return `${clerkUserId}:profile:${payload?.udiseNumber || 'school'}`;
+  return `${clerkUserId}:${type}:${Date.now()}`;
+}
+
+export function getOfflineQueue(): QueuedSyncAction[] {
   if (typeof localStorage === 'undefined') return [];
   try {
     const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
@@ -45,28 +64,102 @@ function getOfflineQueue(): QueuedSyncAction[] {
   }
 }
 
+export function clearOfflineQueue(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(OFFLINE_QUEUE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function saveOfflineQueue(queue: QueuedSyncAction[]): void {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
   } catch (err) {
-    console.warn('Failed to save offline queue:', err);
+    logStructuredEvent({
+      category: 'SYNC_FAILURE',
+      level: 'error',
+      message: 'Failed to persist offline sync queue to localStorage',
+      context: { queueSize: queue.length, error: String(err) },
+    });
   }
 }
 
-function pushToOfflineQueue(action: QueuedSyncAction): void {
+export function pushToOfflineQueue(action: QueuedSyncAction): QueuedSyncAction {
   const queue = getOfflineQueue();
-  // Filter out any duplicate pending updates for same resource
+  const idempotencyKey =
+    action.idempotencyKey || buildSyncIdempotencyKey(action.type, action.clerkUserId, action.payload);
+
+  const normalizedAction: QueuedSyncAction = {
+    ...action,
+    idempotencyKey,
+    retryCount: action.retryCount ?? 0,
+    maxRetries: action.maxRetries ?? DEFAULT_MAX_RETRIES,
+    nextRetryAt: action.nextRetryAt ?? Date.now(),
+  };
+
+  // Deduplicate/coalesce pending updates for the same resource using idempotencyKey
   const filtered = queue.filter((item) => {
-    if (item.type === action.type && item.clerkUserId === action.clerkUserId) {
-      if (item.type === 'daily_entry' && item.payload?.date === action.payload?.date) return false;
-      if (item.type === 'daily_delete' && item.payload === action.payload) return false;
-      if (item.type === 'stock_inward' && item.payload?.monthKey === action.payload?.monthKey) return false;
+    const itemKey = item.idempotencyKey || buildSyncIdempotencyKey(item.type, item.clerkUserId, item.payload);
+    if (itemKey === idempotencyKey) return false;
+    // If a new daily_entry is pushed for a date, remove any pending daily_delete for that same date and vice versa
+    if (
+      action.type === 'daily_entry' &&
+      item.type === 'daily_delete' &&
+      item.clerkUserId === action.clerkUserId &&
+      item.payload === action.payload?.date
+    ) {
+      return false;
+    }
+    if (
+      action.type === 'daily_delete' &&
+      item.type === 'daily_entry' &&
+      item.clerkUserId === action.clerkUserId &&
+      item.payload?.date === action.payload
+    ) {
+      return false;
     }
     return true;
   });
-  filtered.push(action);
+
+  filtered.push(normalizedAction);
   saveOfflineQueue(filtered);
+  return normalizedAction;
+}
+
+/**
+ * Deterministic conflict resolution between a local entry and a cloud entry for the same date.
+ * Newest `savedAt` wins; if timestamps are equal or missing, local entry wins to prevent data loss.
+ */
+export function resolveSyncConflict(
+  localEntry: DailyRegisterEntry,
+  cloudEntry: DailyRegisterEntry
+): DailyRegisterEntry {
+  const localTime = localEntry.savedAt ? new Date(localEntry.savedAt).getTime() : 0;
+  const cloudTime = cloudEntry.savedAt ? new Date(cloudEntry.savedAt).getTime() : 0;
+  if (cloudTime > localTime) {
+    return cloudEntry;
+  }
+  return localEntry;
+}
+
+export function getOfflineQueueStats(): {
+  pendingCount: number;
+  failedCount: number;
+  exhaustedCount: number;
+  status: SyncStatus;
+} {
+  const queue = getOfflineQueue();
+  const failedCount = queue.filter((q) => (q.retryCount || 0) > 0).length;
+  const exhaustedCount = queue.filter((q) => (q.retryCount || 0) >= (q.maxRetries || DEFAULT_MAX_RETRIES)).length;
+  return {
+    pendingCount: queue.length,
+    failedCount,
+    exhaustedCount,
+    status: currentSyncStatus,
+  };
 }
 
 // Auto-reconnect and lifecycle event handlers
@@ -267,6 +360,23 @@ export async function pullUserDataFromCloud(
         });
       }
 
+      // Overlay any newer unsynced offline queue items for this user so stale cloud reads never overwrite offline edits
+      const pendingOffline = getOfflineQueue().filter((q) => q.clerkUserId === clerkUserId);
+      for (const item of pendingOffline) {
+        if (item.type === 'daily_entry' && item.payload?.date) {
+          hasAnyData = true;
+          const existingCloud = dailyEntries[item.payload.date];
+          dailyEntries[item.payload.date] = existingCloud
+            ? resolveSyncConflict(item.payload, existingCloud)
+            : item.payload;
+        } else if (item.type === 'daily_delete' && typeof item.payload === 'string') {
+          delete dailyEntries[item.payload];
+        } else if (item.type === 'stock_inward' && item.payload?.monthKey) {
+          hasAnyData = true;
+          stockInward[item.payload.monthKey] = item.payload.stockData;
+        }
+      }
+
       setSyncStatus('synced');
 
       if (!hasAnyData) {
@@ -280,7 +390,14 @@ export async function pullUserDataFromCloud(
         schoolId: cachedSchoolId || undefined,
       };
     } catch (error) {
-      console.error('Failed to pull user data from Supabase:', error);
+      logStructuredEvent({
+        category: 'SYNC_FAILURE',
+        level: 'error',
+        message: 'Failed to pull user data from Supabase',
+        userId: clerkUserId,
+        schoolId: cachedSchoolId || undefined,
+        context: { error: String(error) },
+      });
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setSyncStatus('offline');
       } else {
@@ -303,16 +420,45 @@ const pendingDailyEntries = new Map<string, { entry: DailyRegisterEntry; clerkUs
 const pendingStockInwards = new Map<string, { monthKey: string; stockData: MonthlyStockInward; clerkUserId: string }>();
 let debounceTimer: any = null;
 
+function requeueFailedFlushItems(
+  entriesToFlush: Array<{ entry: DailyRegisterEntry; clerkUserId: string }>,
+  stockToFlush: Array<{ monthKey: string; stockData: MonthlyStockInward; clerkUserId: string }>,
+  errorMsg: string
+): void {
+  const nextRetry = Date.now() + 2000;
+  for (const { entry, clerkUserId } of entriesToFlush) {
+    pushToOfflineQueue({
+      type: 'daily_entry',
+      payload: entry,
+      clerkUserId,
+      timestamp: new Date().toISOString(),
+      retryCount: 1,
+      nextRetryAt: nextRetry,
+      lastError: errorMsg,
+    });
+  }
+  for (const { monthKey, stockData, clerkUserId } of stockToFlush) {
+    pushToOfflineQueue({
+      type: 'stock_inward',
+      payload: { monthKey, stockData },
+      clerkUserId,
+      timestamp: new Date().toISOString(),
+      retryCount: 1,
+      nextRetryAt: nextRetry,
+      lastError: errorMsg,
+    });
+  }
+}
+
 /**
  * Flushes all queued debounced writes immediately to Supabase in batches.
+ * If batch flush fails, items are safely preserved in the persistent offline queue with retry metadata.
  */
 export async function flushPendingSync(): Promise<void> {
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-
-  if (!isSupabaseConfigured()) return;
 
   const entriesToFlush = Array.from(pendingDailyEntries.values());
   const stockToFlush = Array.from(pendingStockInwards.values());
@@ -321,6 +467,11 @@ export async function flushPendingSync(): Promise<void> {
   pendingStockInwards.clear();
 
   if (entriesToFlush.length === 0 && stockToFlush.length === 0) return;
+
+  if (!isSupabaseConfigured()) {
+    requeueFailedFlushItems(entriesToFlush, stockToFlush, 'Supabase not configured or offline');
+    return;
+  }
 
   try {
     setSyncStatus('syncing');
@@ -367,15 +518,39 @@ export async function flushPendingSync(): Promise<void> {
     }
 
     const results = await Promise.all(promises);
-    const hasError = results.some((r) => r.error);
-    if (hasError) {
-      console.warn('Batch flush encountered error:', results.find((r) => r.error)?.error);
+    const failedResult = results.find((r) => r.error);
+    if (failedResult?.error) {
+      const errMsg = failedResult.error.message || String(failedResult.error);
+      requeueFailedFlushItems(entriesToFlush, stockToFlush, errMsg);
+      logStructuredEvent({
+        category: 'SYNC_FAILURE',
+        level: 'error',
+        message: 'Batch sync flush failed; items safely re-queued for retry',
+        schoolId: cachedSchoolId || undefined,
+        context: {
+          entriesCount: entriesToFlush.length,
+          stockCount: stockToFlush.length,
+          error: errMsg,
+        },
+      });
       setSyncStatus('error');
     } else {
       setSyncStatus('synced');
     }
   } catch (err) {
-    console.error('Failed to flush pending sync to Supabase:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    requeueFailedFlushItems(entriesToFlush, stockToFlush, errMsg);
+    logStructuredEvent({
+      category: 'SYNC_FAILURE',
+      level: 'error',
+      message: 'Exception during batch sync flush; items safely re-queued',
+      schoolId: cachedSchoolId || undefined,
+      context: {
+        entriesCount: entriesToFlush.length,
+        stockCount: stockToFlush.length,
+        error: errMsg,
+      },
+    });
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setSyncStatus('offline');
     } else {
@@ -385,18 +560,37 @@ export async function flushPendingSync(): Promise<void> {
 }
 
 /**
- * Processes queued actions saved when the app was offline.
+ * Processes queued actions saved when the app was offline or after a failed sync.
+ * Implements exponential backoff retry, profile sync support, and structured recovery logging.
  */
-export async function processOfflineQueue(): Promise<void> {
+export async function processOfflineQueue(forceImmediate: boolean = false): Promise<void> {
   const queue = getOfflineQueue();
   if (queue.length === 0 || !isSupabaseConfigured()) return;
 
   try {
     setSyncStatus('syncing');
     const remainingQueue: QueuedSyncAction[] = [];
+    const now = Date.now();
+    let recoveredCount = 0;
 
     for (const item of queue) {
+      const retryCount = item.retryCount || 0;
+      const maxRetries = item.maxRetries || DEFAULT_MAX_RETRIES;
+
+      // Respect backoff window unless forced via manual recovery
+      if (!forceImmediate && item.nextRetryAt && item.nextRetryAt > now) {
+        remainingQueue.push(item);
+        continue;
+      }
+
+      if (!forceImmediate && retryCount >= maxRetries) {
+        remainingQueue.push(item);
+        continue;
+      }
+
       try {
+        let opError: any = null;
+
         if (item.type === 'daily_entry') {
           const row: any = {
             clerk_user_id: item.clerkUserId,
@@ -416,10 +610,13 @@ export async function processOfflineQueue(): Promise<void> {
           };
           if (cachedSchoolId) row.school_id = cachedSchoolId;
           const { error } = await supabase.from('daily_entries').upsert(row, { onConflict: 'clerk_user_id,date' });
-          if (error) remainingQueue.push(item);
+          opError = error;
         } else if (item.type === 'daily_delete') {
-          const { error } = await supabase.from('daily_entries').delete().match({ clerk_user_id: item.clerkUserId, date: item.payload });
-          if (error) remainingQueue.push(item);
+          const { error } = await supabase
+            .from('daily_entries')
+            .delete()
+            .match({ clerk_user_id: item.clerkUserId, date: item.payload });
+          opError = error;
         } else if (item.type === 'stock_inward') {
           const row: any = {
             clerk_user_id: item.clerkUserId,
@@ -430,20 +627,95 @@ export async function processOfflineQueue(): Promise<void> {
           };
           if (cachedSchoolId) row.school_id = cachedSchoolId;
           const { error } = await supabase.from('stock_inward').upsert(row, { onConflict: 'clerk_user_id,month_key' });
-          if (error) remainingQueue.push(item);
+          opError = error;
+        } else if (item.type === 'profile') {
+          const p: SchoolProfile = item.payload;
+          const row: any = {
+            clerk_user_id: item.clerkUserId,
+            school_name: p.schoolName,
+            udise_number: p.udiseNumber,
+            center_cluster: p.centerCluster || '',
+            district: p.district || '',
+            taluka: p.taluka || '',
+            headmaster_name: p.headmasterName || '',
+            incharge_teacher: p.inchargeTeacher || '',
+            cook_name: p.cookName || '',
+            updated_at: new Date().toISOString(),
+          };
+          const { error } = await supabase.from('schools').upsert(row, { onConflict: 'udise_number' });
+          opError = error;
         }
-      } catch {
-        remainingQueue.push(item);
+
+        if (opError) {
+          const nextRetryCount = retryCount + 1;
+          const backoffMs = Math.min(60000, 2000 * Math.pow(2, nextRetryCount));
+          remainingQueue.push({
+            ...item,
+            retryCount: nextRetryCount,
+            nextRetryAt: Date.now() + backoffMs,
+            lastError: opError.message || String(opError),
+          });
+          logStructuredEvent({
+            category: 'SYNC_FAILURE',
+            level: 'warn',
+            message: `Offline queue retry #${nextRetryCount} failed for ${item.type}`,
+            userId: item.clerkUserId,
+            context: { type: item.type, retryCount: nextRetryCount, error: opError.message || String(opError) },
+          });
+        } else {
+          recoveredCount++;
+        }
+      } catch (err) {
+        const nextRetryCount = retryCount + 1;
+        const backoffMs = Math.min(60000, 2000 * Math.pow(2, nextRetryCount));
+        remainingQueue.push({
+          ...item,
+          retryCount: nextRetryCount,
+          nextRetryAt: Date.now() + backoffMs,
+          lastError: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
     saveOfflineQueue(remainingQueue);
+    if (recoveredCount > 0) {
+      logStructuredEvent({
+        category: 'SYNC_RECOVERY',
+        level: 'info',
+        message: `Successfully recovered ${recoveredCount} queued offline sync item(s)`,
+        context: { recoveredCount, remainingCount: remainingQueue.length },
+      });
+    }
+
     if (remainingQueue.length === 0) {
       setSyncStatus('synced');
+    } else {
+      setSyncStatus('error');
     }
   } catch (err) {
-    console.error('Failed to process offline queue:', err);
+    logStructuredEvent({
+      category: 'SYNC_FAILURE',
+      level: 'error',
+      message: 'Failed processing offline sync queue',
+      context: { error: String(err) },
+    });
+    setSyncStatus('error');
   }
+}
+
+/**
+ * Resets retry counters on any failed/exhausted offline queue items and triggers immediate recovery.
+ */
+export async function retryFailedSync(): Promise<{ remaining: number }> {
+  const queue = getOfflineQueue().map((item) => ({
+    ...item,
+    retryCount: 0,
+    nextRetryAt: Date.now(),
+  }));
+  saveOfflineQueue(queue);
+  await flushPendingSync();
+  await processOfflineQueue(true);
+  return { remaining: getOfflineQueue().length };
 }
 
 /**
@@ -512,13 +784,36 @@ export async function syncDeleteDailyEntryFromCloud(
       .match({ clerk_user_id: clerkUserId, date: dateKey });
 
     if (error) {
-      console.warn('Supabase delete error:', error);
+      pushToOfflineQueue({
+        type: 'daily_delete',
+        payload: dateKey,
+        clerkUserId,
+        timestamp: new Date().toISOString(),
+        retryCount: 1,
+        nextRetryAt: Date.now() + 2000,
+        lastError: error.message || String(error),
+      });
+      logStructuredEvent({
+        category: 'SYNC_FAILURE',
+        level: 'warn',
+        message: `Supabase delete failed for ${dateKey}; re-queued for retry`,
+        userId: clerkUserId,
+        context: { dateKey, error: error.message || String(error) },
+      });
       setSyncStatus('error');
     } else {
       setSyncStatus('synced');
     }
   } catch (err) {
-    console.error('Failed to delete daily entry from Supabase:', err);
+    pushToOfflineQueue({
+      type: 'daily_delete',
+      payload: dateKey,
+      clerkUserId,
+      timestamp: new Date().toISOString(),
+      retryCount: 1,
+      nextRetryAt: Date.now() + 2000,
+      lastError: err instanceof Error ? err.message : String(err),
+    });
     setSyncStatus('error');
   }
 }
@@ -557,9 +852,6 @@ export async function syncStockInwardToCloud(
 
 /**
  * Upserts School Profile into Supabase.
- */
-/**
- * Upserts School Profile into Supabase.
  * Ensures the school record exists with unique UDISE and creates/updates user membership as SCHOOL_ADMIN.
  */
 export async function syncSchoolProfileToCloud(
@@ -568,10 +860,23 @@ export async function syncSchoolProfileToCloud(
   userEmail?: string,
   userName?: string
 ): Promise<void> {
-  if (!isSupabaseConfigured() || !clerkUserId) return;
+  if (!clerkUserId) return;
   // Never upload empty or legacy demo seed profile
   if (!profile.schoolName && !profile.udiseNumber) return;
   if (profile.udiseNumber === '27251403201' || profile.schoolName.includes('बोरगाव')) return;
+
+  if ((typeof navigator !== 'undefined' && !navigator.onLine) || !isSupabaseConfigured()) {
+    pushToOfflineQueue({
+      type: 'profile',
+      payload: profile,
+      clerkUserId,
+      timestamp: new Date().toISOString(),
+    });
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSyncStatus('offline');
+    }
+    return;
+  }
 
   try {
     setSyncStatus('syncing');

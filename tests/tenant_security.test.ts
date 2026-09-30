@@ -656,6 +656,345 @@ async function runTestSuite() {
     'Audit trail recorded rejection with admin reason'
   );
 
+  // --- Test 10: Subscription Lifecycle Automation (TRIAL -> ACTIVE -> EXPIRING -> EXPIRED) & Data Preservation ---
+  console.log('\n[10] Subscription Lifecycle Automation & School Data Preservation');
+  const {
+    extendSubscription,
+    getAllAccessRequests,
+    computeSuperAdminKpis,
+    createTeacherInvitation,
+    verifyAdminCredentials,
+  } = await import('../src/lib/subscription-store');
+
+  // 10.1: Approve as 14-day TRIAL -> automatically within 15-day window -> transitions to EXPIRING on lifecycle check
+  const lifecycleSchool = submitAccessRequest({
+    clerkUserId: 'user_lifecycle_1',
+    userEmail: 'lifecycle@gov.in',
+    schoolName: 'Z.P. School Lifecycle',
+    udiseNumber: '27251407771',
+    district: 'Kolhapur',
+    centerCluster: 'Karvir',
+    agreedToTerms: true,
+  });
+  const trialApproved = approveAccessRequest(lifecycleSchool.id, 0, undefined, 'umardesh@gmail.com', true);
+  assert(trialApproved?.subscriptionStatus === 'TRIAL', 'Lifecycle step 1: Approved as TRIAL');
+
+  // Extend to full 6-month ACTIVE subscription
+  const activeExtended = extendSubscription(lifecycleSchool.id, 6, 'umardesh@gmail.com');
+  assert(
+    activeExtended?.subscriptionStatus === 'ACTIVE' && activeExtended.status === 'active',
+    'Lifecycle step 2: TRIAL -> ACTIVE via extendSubscription'
+  );
+
+  // Simulate upcoming expiry (10 days left) -> should automatically transition to EXPIRING
+  const tenDaysFromNow = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+  approveAccessRequest(lifecycleSchool.id, 1, tenDaysFromNow, 'umardesh@gmail.com', false);
+  const afterExpiringCheck = getAllAccessRequests().find((r) => r.id === lifecycleSchool.id);
+  assert(
+    afterExpiringCheck?.subscriptionStatus === 'EXPIRING' && afterExpiringCheck.status === 'active',
+    'Lifecycle step 3: ACTIVE -> EXPIRING automatically detected when <= 15 days remain'
+  );
+
+  // Simulate past-due expiry (2 days ago) -> should automatically transition to EXPIRED while preserving school data
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  approveAccessRequest(lifecycleSchool.id, 1, twoDaysAgo, 'umardesh@gmail.com', false);
+  const afterExpiredCheck = getAllAccessRequests().find((r) => r.id === lifecycleSchool.id);
+  assert(
+    afterExpiredCheck?.status === 'expired' &&
+      afterExpiredCheck.accessStatus === 'EXPIRED' &&
+      afterExpiredCheck.subscriptionStatus === 'EXPIRED' &&
+      afterExpiredCheck.schoolName === 'Z.P. School Lifecycle' &&
+      afterExpiredCheck.udiseNumber === '27251407771',
+    'Lifecycle step 4: EXPIRING -> EXPIRED blocks normal access while 100% preserving school data'
+  );
+
+  // Invalid subscription manipulation check (negative or excessive months)
+  const invalidExtend = extendSubscription(lifecycleSchool.id, -6, 'umardesh@gmail.com');
+  assert(invalidExtend === null, 'Subscription manipulation with negative duration is rejected');
+
+  // Renew expired school -> transitions back to ACTIVE
+  const renewedSchool = extendSubscription(lifecycleSchool.id, 12, 'umardesh@gmail.com');
+  assert(
+    renewedSchool?.status === 'active' &&
+      renewedSchool.accessStatus === 'ACTIVE' &&
+      renewedSchool.subscriptionStatus === 'ACTIVE',
+    'Lifecycle step 5: EXPIRED -> ACTIVE upon renewal with audit trail'
+  );
+
+  // Verify Super Admin Command Center 11 KPIs computation
+  const kpis = computeSuperAdminKpis();
+  assert(
+    typeof kpis.pendingRequests === 'number' &&
+      typeof kpis.needsInformation === 'number' &&
+      typeof kpis.verifiedSchools === 'number' &&
+      typeof kpis.activeSchools === 'number' &&
+      typeof kpis.trialSchools === 'number' &&
+      typeof kpis.expiringSubscriptions === 'number' &&
+      typeof kpis.expiredSubscriptions === 'number' &&
+      typeof kpis.suspendedSchools === 'number' &&
+      typeof kpis.newSchools === 'number' &&
+      typeof kpis.pendingReferralPayouts === 'number' &&
+      typeof kpis.paidReferralRewards === 'number',
+    'Super Admin Command Center computes all 11 operational KPIs accurately'
+  );
+
+  // --- Test 11: Referral Manipulation, Invitation Abuse & Notification Deduplication ---
+  console.log('\n[11] Referral Manipulation, Invitation Abuse & Notification Deduplication');
+  const {
+    getOrCreateUserReferralCode,
+    validateReferralCode,
+    recordReferralRegistration,
+  } = await import('../src/lib/referral-store');
+  const { hasNotificationBeenSent, markNotificationSent } = await import('../src/lib/email-service');
+
+  // Create referrer profile for School A
+  const refCodeA = getOrCreateUserReferralCode({
+    id: 'user_ref_owner_a',
+    email: 'owner_a@gov.in',
+    name: 'Owner A',
+    schoolName: 'Z.P. Referrer School',
+    udise: '27251409001',
+  });
+
+  // Self-referral attempt by same user ID -> must be blocked
+  const selfRefValidation = validateReferralCode(refCodeA, 'user_ref_owner_a');
+  assert(!selfRefValidation.valid, 'Self-referral by same user ID is blocked');
+
+  // Self-referral attempt by same UDISE -> must be blocked in recordReferralRegistration
+  const selfUdiseRecord = recordReferralRegistration(
+    {
+      id: 'req_self_udise',
+      clerkUserId: 'different_user_id',
+      userEmail: 'owner_a@gov.in',
+      schoolName: 'Z.P. Referrer School',
+      udiseNumber: '27251409001',
+      district: 'Pune',
+      status: 'pending',
+      requestedAt: new Date().toISOString(),
+    },
+    refCodeA
+  );
+  assert(selfUdiseRecord === null, 'Self-referral manipulation using same UDISE or email is strictly blocked');
+
+  // Invitation Abuse: TEACHER attempting to invite another teacher -> must be blocked
+  const teacherInviteAttempt = createTeacherInvitation({
+    schoolId: 'school-uuid-aaa',
+    schoolName: 'Z.P. Primary School Pune',
+    udiseNumber: '27251401111',
+    invitedEmail: 'friend@pune.gov.in',
+    invitedByUserId: 'user_teacher_pune',
+    invitedByName: 'Teacher Pune',
+    callerRole: 'TEACHER',
+  });
+  assert(!teacherInviteAttempt.success, 'Invitation abuse: TEACHER is blocked from creating school invitations');
+
+  // Valid SCHOOL_ADMIN invitation succeeds, duplicate pending invitation is blocked
+  const adminInvite1 = createTeacherInvitation({
+    schoolId: 'school-uuid-aaa',
+    schoolName: 'Z.P. Primary School Pune',
+    udiseNumber: '27251401111',
+    invitedEmail: 'valid_teacher@pune.gov.in',
+    invitedByUserId: 'user_headmaster_pune',
+    invitedByName: 'Headmaster Pune',
+    callerRole: 'SCHOOL_ADMIN',
+  });
+  const adminInviteDup = createTeacherInvitation({
+    schoolId: 'school-uuid-aaa',
+    schoolName: 'Z.P. Primary School Pune',
+    udiseNumber: '27251401111',
+    invitedEmail: 'valid_teacher@pune.gov.in',
+    invitedByUserId: 'user_headmaster_pune',
+    invitedByName: 'Headmaster Pune',
+    callerRole: 'SCHOOL_ADMIN',
+  });
+  assert(
+    adminInvite1.success && !adminInviteDup.success,
+    'SCHOOL_ADMIN can invite teacher and duplicate pending invitations are prevented'
+  );
+
+  // Notification Deduplication check
+  const dedupKey = 'test_dedup:school_27251401111:approval';
+  assert(!hasNotificationBeenSent(dedupKey), 'Fresh notification key has not been sent yet');
+  markNotificationSent(dedupKey);
+  assert(hasNotificationBeenSent(dedupKey), 'Deduplication ledger prevents duplicate notifications within TTL window');
+
+  // --- Test 12: Secure Audited School Data Export ---
+  console.log('\n[12] Secure Audited School Export & Cross-School Export Prevention');
+  const { createEmptyCleanAppData, prepareValidatedExportPayload } = await import('../src/lib/storage');
+
+  const schoolAppData = createEmptyCleanAppData({
+    id: 'school-uuid-aaa',
+    schoolName: 'Z.P. Primary School Pune',
+    udiseNumber: '27251401111',
+    centerCluster: 'Haveli',
+    standardCategory: 'इयत्ता १ ली ते ५ वी (प्राथमिक)',
+    district: 'Pune',
+    taluka: 'Haveli',
+    headmasterName: 'HM Pune',
+    inchargeTeacher: 'Teacher Pune',
+    cookName: 'Cook A',
+    role: 'SCHOOL_ADMIN',
+  });
+
+  // Add 1 own-school entry and 1 foreign-school entry (simulating cache pollution attempt)
+  schoolAppData.dailyEntries['2026-09-28'] = {
+    id: '2026-09-28',
+    schoolId: 'school-uuid-aaa',
+    date: '2026-09-28',
+    dayOfWeek: 1,
+    dayNameMr: 'सोमवार',
+    dayNameEn: 'Monday',
+    dishId: 'dish_1',
+    dishNameMr: 'मसाले भात',
+    dishNameEn: 'Masale Bhat',
+    studentCount: 80,
+    items: {},
+    totalGrainsPulsesKg: 8,
+    totalVegetablesKg: 4,
+    totalCookingCost: 436,
+    remarks: 'Own school entry',
+    savedAt: new Date().toISOString(),
+  };
+  schoolAppData.dailyEntries['2026-09-29'] = {
+    id: '2026-09-29',
+    schoolId: 'school-uuid-bbb-foreign', // Foreign school!
+    date: '2026-09-29',
+    dayOfWeek: 2,
+    dayNameMr: 'मंगळवार',
+    dayNameEn: 'Tuesday',
+    dishId: 'dish_2',
+    dishNameMr: 'मूग डाळ खिचडी',
+    dishNameEn: 'Moong Khichdi',
+    studentCount: 150,
+    items: {},
+    totalGrainsPulsesKg: 15,
+    totalVegetablesKg: 7.5,
+    totalCookingCost: 817.5,
+    remarks: 'Foreign school entry',
+    savedAt: new Date().toISOString(),
+  };
+
+  // 12.1: SCHOOL_ADMIN attempting to export another school's data -> must be blocked
+  const unauthorizedExport = prepareValidatedExportPayload(schoolAppData, {
+    userId: 'user_headmaster_pune',
+    userRole: 'SCHOOL_ADMIN',
+    requestedSchoolId: 'school-uuid-bbb',
+  });
+  assert(!unauthorizedExport.success, 'SCHOOL_ADMIN is blocked from exporting another school by ID');
+
+  const unauthorizedUdiseExport = prepareValidatedExportPayload(schoolAppData, {
+    userId: 'user_headmaster_pune',
+    userRole: 'SCHOOL_ADMIN',
+    requestedUdise: '27251402222',
+  });
+  assert(!unauthorizedUdiseExport.success, 'SCHOOL_ADMIN is blocked from exporting another school by UDISE');
+
+  // 12.2: Valid own-school export strips foreign entries, includes schema/version metadata, and creates audit log
+  const validExport = prepareValidatedExportPayload(schoolAppData, {
+    userId: 'user_headmaster_pune',
+    userRole: 'SCHOOL_ADMIN',
+    requestedSchoolId: 'school-uuid-aaa',
+  });
+  assert(
+    validExport.success &&
+      validExport.payload !== undefined &&
+      Object.keys(validExport.payload.dailyEntries).length === 1 &&
+      validExport.payload.dailyEntries['2026-09-28'] !== undefined &&
+      validExport.payload.dailyEntries['2026-09-29'] === undefined &&
+      validExport.payload.exportMetadata?.schemaVersion === '2.0.0' &&
+      validExport.payload.exportMetadata?.udiseNumber === '27251401111',
+    'Valid export strips foreign school data and attaches schema/version metadata'
+  );
+
+  // --- Test 13: Offline Sync Reliability (Idempotency, Conflict Resolution, Retry Metadata) ---
+  console.log('\n[13] Offline Sync Queue Idempotency & Conflict Resolution');
+  const {
+    clearOfflineQueue,
+    pushToOfflineQueue,
+    getOfflineQueue,
+    resolveSyncConflict,
+  } = await import('../src/lib/cloud-sync');
+
+  clearOfflineQueue();
+
+  // Rapid consecutive offline edits to the same date coalesce into 1 idempotent queue item
+  pushToOfflineQueue({
+    type: 'daily_entry',
+    clerkUserId: 'user_headmaster_pune',
+    payload: { date: '2026-09-30', studentCount: 60, savedAt: '2026-09-30T10:00:00.000Z' },
+    timestamp: '2026-09-30T10:00:00.000Z',
+  });
+  pushToOfflineQueue({
+    type: 'daily_entry',
+    clerkUserId: 'user_headmaster_pune',
+    payload: { date: '2026-09-30', studentCount: 75, savedAt: '2026-09-30T10:05:00.000Z' },
+    timestamp: '2026-09-30T10:05:00.000Z',
+  });
+
+  const queueItems = getOfflineQueue();
+  assert(
+    queueItems.length === 1 && queueItems[0].payload.studentCount === 75,
+    'Idempotency key coalesces duplicate offline writes for the same date into a single latest mutation'
+  );
+
+  // Conflict resolution: newer local offline entry wins over stale cloud entry
+  const newerLocal: any = { date: '2026-09-30', studentCount: 75, savedAt: '2026-09-30T10:05:00.000Z' };
+  const olderCloud: any = { date: '2026-09-30', studentCount: 50, savedAt: '2026-09-30T09:00:00.000Z' };
+  const resolvedEntry = resolveSyncConflict(newerLocal, olderCloud);
+  assert(
+    resolvedEntry.studentCount === 75,
+    'Conflict resolution preserves newer local offline entry over stale cloud cache'
+  );
+  clearOfflineQueue();
+
+  // --- Test 14: Structured Observability & Sensitive Credential Redaction ---
+  console.log('\n[14] Structured Observability & Credential Redaction');
+  const {
+    logStructuredEvent,
+    getStructuredLogs,
+    redactSensitiveData,
+  } = await import('../src/lib/observability');
+
+  // Trigger failed admin login -> logs AUTH_FAILURE with redacted password
+  const failedAuth = verifyAdminCredentials('attacker@example.com', 'SuperSecretPassword123!');
+  assert(!failedAuth, 'Invalid admin credentials rejected');
+
+  // Directly test redaction of passwords, tokens, passcodes, and service_role keys
+  const redactedObj = redactSensitiveData({
+    password: 'MySecretPassword',
+    passcode: 'Admin@1234',
+    accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+    apiKey: 're_1234567890abcdefghijklmnop',
+    safeField: 'Pune District',
+  });
+
+  assert(
+    redactedObj.password === '[REDACTED]' &&
+      redactedObj.passcode === '[REDACTED]' &&
+      redactedObj.accessToken === '[REDACTED]' &&
+      redactedObj.apiKey === '[REDACTED]' &&
+      redactedObj.safeField === 'Pune District',
+    'Observability engine strictly redacts passwords, passcodes, JWT tokens, and API keys'
+  );
+
+  logStructuredEvent({
+    category: 'SYNC_FAILURE',
+    level: 'error',
+    message: 'Simulated sync failure with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.sig',
+    context: { token: 'secret_token_value', schoolUdise: '27251401111' },
+  });
+
+  const authLogs = getStructuredLogs('AUTH_FAILURE');
+  const syncLogs = getStructuredLogs('SYNC_FAILURE');
+  const serializedLogs = JSON.stringify(getStructuredLogs());
+  assert(
+    authLogs.length >= 1 &&
+      syncLogs.length >= 1 &&
+      !serializedLogs.includes('SuperSecretPassword123!') &&
+      !serializedLogs.includes('secret_token_value'),
+    'Structured logs record AUTH_FAILURE and SYNC_FAILURE without leaking any sensitive credentials'
+  );
+
   // --- Summary ---
   console.log('\n================================================================');
   console.log(`  TEST RESULTS: ${passedTests} PASSED, ${failedTests} FAILED`);

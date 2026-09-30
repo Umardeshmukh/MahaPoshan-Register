@@ -27,6 +27,7 @@ import {
   verifyAdminCredentials,
   bulkApproveRequests,
   requestMoreInfo,
+  computeSuperAdminKpis,
 } from '../lib/subscription-store';
 import {
   getAllReferrals,
@@ -112,11 +113,16 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [config, setConfig] = useState(getSuperAdminConfig());
 
-  // UI & Filter States
+  // UI & Filter States (Command Center Filters & Pagination)
   const [activeTab, setActiveTab] = useState<'requests' | 'active' | 'referrals' | 'notifications' | 'settings'>('requests');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [districtFilter, setDistrictFilter] = useState<string>('all');
+  const [clusterFilter, setClusterFilter] = useState<string>('all');
+  const [subscriptionFilter, setSubscriptionFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
 
   // Batch Operations State
@@ -470,7 +476,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     );
   }
 
-  // Available districts extracted dynamically from registered school profiles
+  // Available districts and clusters extracted dynamically from registered school profiles
   const availableDistricts = useMemo(() => {
     const set = new Set<string>();
     requests.forEach((r) => {
@@ -481,6 +487,23 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'mr'));
   }, [requests]);
 
+  const availableClusters = useMemo(() => {
+    const set = new Set<string>();
+    requests.forEach((r) => {
+      if (districtFilter !== 'all' && r.district !== districtFilter) return;
+      if (r.centerCluster && r.centerCluster.trim()) {
+        set.add(r.centerCluster.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'mr'));
+  }, [requests, districtFilter]);
+
+  // 11 Super Admin Command Center KPIs (Requirement 1)
+  const kpiSummary = useMemo(
+    () => computeSuperAdminKpis(requests, referrals),
+    [requests, referrals]
+  );
+
   // Queue counts for Super Admin Review Queues (Requirement 5)
   const queueCounts = useMemo(() => {
     const counts = {
@@ -490,6 +513,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
       verified: 0,
       rejected: 0,
       expiring: 0,
+      expired: 0,
       suspended: 0,
     };
     for (const r of requests) {
@@ -505,7 +529,9 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
         counts.suspended++;
       }
 
-      if (r.status === 'active' && daysLeft <= 15 && daysLeft >= 0) {
+      if (r.status === 'expired' || r.subscriptionStatus === 'EXPIRED' || (r.expiresAt && daysLeft <= 0)) {
+        counts.expired++;
+      } else if (r.status === 'active' && (r.subscriptionStatus === 'EXPIRING' || (daysLeft <= 15 && daysLeft > 0))) {
         counts.expiring++;
       }
 
@@ -522,22 +548,24 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     return counts;
   }, [requests]);
 
-  // Filter requests by search query, review queue status, and district
+  // Filter requests by search query (School name, UDISE, User/contact), Status, Subscription, District, Cluster/Kendra, and Date
   const filteredRequests = useMemo(() => {
+    const now = Date.now();
     return requests.filter((r) => {
       const q = searchTerm.toLowerCase().trim();
       const matchesSearch =
         !q ||
         r.schoolName.toLowerCase().includes(q) ||
+        r.udiseNumber.toLowerCase().includes(q) ||
         r.userEmail.toLowerCase().includes(q) ||
-        r.udiseNumber.includes(q) ||
         (r.userName && r.userName.toLowerCase().includes(q)) ||
+        (r.phone && r.phone.toLowerCase().includes(q)) ||
         (r.centerCluster && r.centerCluster.toLowerCase().includes(q)) ||
         (r.district && r.district.toLowerCase().includes(q));
 
       const daysLeft = r.expiresAt
-        ? Math.ceil((new Date(r.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-        : 0;
+        ? Math.ceil((new Date(r.expiresAt).getTime() - now) / (1000 * 60 * 60 * 24))
+        : 365;
 
       let matchesStatus = true;
       if (statusFilter === 'all') {
@@ -553,7 +581,9 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
       } else if (statusFilter === 'rejected') {
         matchesStatus = r.verificationStatus === 'REJECTED' || r.status === 'rejected';
       } else if (statusFilter === 'expiring') {
-        matchesStatus = r.status === 'active' && daysLeft <= 15 && daysLeft >= 0;
+        matchesStatus = r.status === 'active' && (r.subscriptionStatus === 'EXPIRING' || (daysLeft <= 15 && daysLeft > 0));
+      } else if (statusFilter === 'expired') {
+        matchesStatus = r.status === 'expired' || r.subscriptionStatus === 'EXPIRED' || (!!r.expiresAt && daysLeft <= 0);
       } else if (statusFilter === 'suspended') {
         matchesStatus = r.accessStatus === 'SUSPENDED' || r.status === 'pending_deletion';
       } else {
@@ -561,10 +591,44 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
       }
 
       const matchesDistrict = districtFilter === 'all' || r.district === districtFilter;
+      const matchesCluster = clusterFilter === 'all' || (r.centerCluster || '').trim() === clusterFilter;
 
-      return matchesSearch && matchesStatus && matchesDistrict;
+      let matchesSubscription = true;
+      if (subscriptionFilter !== 'all') {
+        if (subscriptionFilter === 'EXPIRING') {
+          matchesSubscription = r.subscriptionStatus === 'EXPIRING' || (r.status === 'active' && daysLeft <= 15 && daysLeft > 0);
+        } else if (subscriptionFilter === 'EXPIRED') {
+          matchesSubscription = r.subscriptionStatus === 'EXPIRED' || r.status === 'expired' || (!!r.expiresAt && daysLeft <= 0);
+        } else {
+          matchesSubscription = r.subscriptionStatus === subscriptionFilter;
+        }
+      }
+
+      let matchesDate = true;
+      if (dateFilter !== 'all') {
+        const reqTime = new Date(r.requestedAt).getTime();
+        if (!isNaN(reqTime)) {
+          if (dateFilter === 'today') {
+            matchesDate = now - reqTime <= 24 * 60 * 60 * 1000;
+          } else if (dateFilter === '7d') {
+            matchesDate = now - reqTime <= 7 * 24 * 60 * 60 * 1000;
+          } else if (dateFilter === '30d') {
+            matchesDate = now - reqTime <= 30 * 24 * 60 * 60 * 1000;
+          }
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesDistrict && matchesCluster && matchesSubscription && matchesDate;
     });
-  }, [requests, searchTerm, statusFilter, districtFilter]);
+  }, [requests, searchTerm, statusFilter, districtFilter, clusterFilter, subscriptionFilter, dateFilter]);
+
+  // Pagination for large datasets (Requirement 1 & 9)
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedRequests = useMemo(() => {
+    const startIdx = (safeCurrentPage - 1) * pageSize;
+    return filteredRequests.slice(startIdx, startIdx + pageSize);
+  }, [filteredRequests, safeCurrentPage, pageSize]);
 
   // Batch Selection Helpers
   const toggleSelect = (id: string) => {
@@ -574,7 +638,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   };
 
   const toggleSelectAllVisible = () => {
-    const visibleIds = filteredRequests.map((r) => r.id);
+    const visibleIds = paginatedRequests.map((r) => r.id);
     const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     if (allSelected) {
       setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
@@ -808,80 +872,173 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
-        {/* Metric Cards Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">Total Profiles</span>
-              <Users className="w-4 h-4 text-slate-400" />
+        {/* Super Admin Command Center: 11 Operational KPIs (Requirement 1) */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+            <div>
+              <h2 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-amber-600" />
+                <span>Super Admin Command Center • Operational KPIs</span>
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Click any KPI card to filter exceptions immediately • Total Schools: {requests.length}
+              </p>
             </div>
-            <p className="text-2xl font-extrabold text-slate-900 mt-2 font-mono">
-              {requests.length}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 border border-amber-200 bg-amber-50/40 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-800">Pending Approval</span>
-              <Clock className="w-4 h-4 text-amber-600" />
-            </div>
-            <p className="text-2xl font-extrabold text-amber-900 mt-2 font-mono">
-              {pendingRequests.length}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 border border-emerald-200 bg-emerald-50/40 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-800">Active Subscriptions</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            </div>
-            <p className="text-2xl font-extrabold text-emerald-900 mt-2 font-mono">
-              {activeSubscriptions.length}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('requests');
-              setStatusFilter('pending_deletion');
-            }}
-            className={`rounded-2xl p-4 border shadow-xs text-left cursor-pointer transition-all ${pendingDeletions.length > 0
-                ? 'bg-rose-50/60 border-rose-300 hover:bg-rose-100/50'
-                : 'bg-white border-slate-200/80'
-              }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold ${pendingDeletions.length > 0 ? 'text-rose-800' : 'text-slate-500'}`}>
-                Data Retention (28 Days)
-              </span>
-              <Trash2 className={`w-4 h-4 ${pendingDeletions.length > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
-            </div>
-            <p className={`text-2xl font-extrabold mt-2 font-mono ${pendingDeletions.length > 0 ? 'text-rose-900' : 'text-slate-900'}`}>
-              {pendingDeletions.length}
-            </p>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              {pendingDeletions.length > 0 ? '28-day retention period active' : 'None pending'}
-            </span>
-          </button>
-
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">Email Alerts</span>
-              <Mail className="w-4 h-4 text-slate-400" />
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-emerald-700">
-                {config.emailAlertsEnabled ? 'Active' : 'Disabled'}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                Email Alerts: {config.emailAlertsEnabled ? 'Active' : 'Disabled'}
               </span>
               <button
                 type="button"
                 onClick={handleTestEmail}
-                className="text-[10px] text-amber-700 font-bold hover:underline cursor-pointer"
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold cursor-pointer"
               >
-                Send Test
+                Send Test Email
               </button>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            {/* 1. Pending requests */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('pending'); setSubscriptionFilter('all'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-amber-200 bg-amber-50/50 hover:bg-amber-100/60 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-amber-800 block">Pending Requests</span>
+              <p className="text-xl font-black text-amber-900 font-mono mt-1">{kpiSummary.pendingRequests}</p>
+              <span className="text-[10px] text-amber-700">प्रलंबित विनंत्या</span>
+            </button>
+
+            {/* 2. Needs information */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('needs_info'); setSubscriptionFilter('all'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-purple-200 bg-purple-50/50 hover:bg-purple-100/60 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-purple-800 block">Needs Information</span>
+              <p className="text-xl font-black text-purple-900 font-mono mt-1">{kpiSummary.needsInformation}</p>
+              <span className="text-[10px] text-purple-700">माहिती आवश्यक</span>
+            </button>
+
+            {/* 3. Verified schools */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('verified'); setSubscriptionFilter('all'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-teal-200 bg-teal-50/40 hover:bg-teal-100/50 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-teal-800 block">Verified Schools</span>
+              <p className="text-xl font-black text-teal-900 font-mono mt-1">{kpiSummary.verifiedSchools}</p>
+              <span className="text-[10px] text-teal-700">पडताळणी पूर्ण</span>
+            </button>
+
+            {/* 4. Active schools */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('verified'); setSubscriptionFilter('ACTIVE'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/60 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-emerald-800 block">Active Schools</span>
+              <p className="text-xl font-black text-emerald-900 font-mono mt-1">{kpiSummary.activeSchools}</p>
+              <span className="text-[10px] text-emerald-700">सक्रिय शाळा</span>
+            </button>
+
+            {/* 5. Trial schools */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('all'); setSubscriptionFilter('TRIAL'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-sky-200 bg-sky-50/50 hover:bg-sky-100/60 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-sky-800 block">Trial Schools</span>
+              <p className="text-xl font-black text-sky-900 font-mono mt-1">{kpiSummary.trialSchools}</p>
+              <span className="text-[10px] text-sky-700">१४-दिवस चाचणी</span>
+            </button>
+
+            {/* 6. Expiring subscriptions */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('expiring'); setSubscriptionFilter('EXPIRING'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-orange-200 bg-orange-50/60 hover:bg-orange-100/60 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-orange-800 block">Expiring Soon</span>
+              <p className="text-xl font-black text-orange-900 font-mono mt-1">{kpiSummary.expiringSubscriptions}</p>
+              <span className="text-[10px] text-orange-700">≤ १५ दिवस उर्वरित</span>
+            </button>
+
+            {/* 7. Expired subscriptions */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('expired'); setSubscriptionFilter('EXPIRED'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-rose-200 bg-rose-50/50 hover:bg-rose-100/60 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-rose-800 block">Expired Subscriptions</span>
+              <p className="text-xl font-black text-rose-900 font-mono mt-1">{kpiSummary.expiredSubscriptions}</p>
+              <span className="text-[10px] text-rose-700">मुदत संपलेल्या शाळा</span>
+            </button>
+
+            {/* 8. Suspended schools */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('suspended'); setSubscriptionFilter('all'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-slate-300 bg-slate-100/70 hover:bg-slate-200/70 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-slate-700 block">Suspended Schools</span>
+              <p className="text-xl font-black text-slate-900 font-mono mt-1">{kpiSummary.suspendedSchools}</p>
+              <span className="text-[10px] text-slate-600">निलंबित / हटवणे प्रलंबित</span>
+            </button>
+
+            {/* 9. New schools (7d) */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('requests'); setStatusFilter('all'); setDateFilter('7d'); setCurrentPage(1); }}
+              className="rounded-xl p-3 border border-indigo-200 bg-indigo-50/40 hover:bg-indigo-100/50 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-indigo-800 block">New Schools (7d)</span>
+              <p className="text-xl font-black text-indigo-900 font-mono mt-1">{kpiSummary.newSchools}</p>
+              <span className="text-[10px] text-indigo-700">नवीन शाळा (७ दिवस)</span>
+            </button>
+
+            {/* 10. Pending referral payouts */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('referrals')}
+              className="rounded-xl p-3 border border-amber-300 bg-amber-50/70 hover:bg-amber-100/70 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-amber-900 block">Pending Referral Payouts</span>
+              <p className="text-xl font-black text-amber-900 font-mono mt-1">{kpiSummary.pendingReferralPayouts}</p>
+              <span className="text-[10px] text-amber-800">बक्षीस देय (Eligible)</span>
+            </button>
+
+            {/* 11. Paid referral rewards */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('referrals')}
+              className="rounded-xl p-3 border border-emerald-300 bg-emerald-50/40 hover:bg-emerald-100/60 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-emerald-900 block">Paid Referral Rewards</span>
+              <p className="text-xl font-black text-emerald-800 font-mono mt-1">{kpiSummary.paidReferralRewards}</p>
+              <span className="text-[10px] text-emerald-700">अदा केलेले बक्षीस</span>
+            </button>
+
+            {/* Reset all filters quick card */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('requests');
+                setStatusFilter('all');
+                setSubscriptionFilter('all');
+                setDistrictFilter('all');
+                setClusterFilter('all');
+                setDateFilter('all');
+                setSearchTerm('');
+                setCurrentPage(1);
+              }}
+              className="rounded-xl p-3 border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left transition-all cursor-pointer"
+            >
+              <span className="text-[11px] font-semibold text-slate-600 block">Reset View</span>
+              <p className="text-xl font-black text-slate-800 font-mono mt-1">{requests.length}</p>
+              <span className="text-[10px] text-slate-500">सर्व फिल्टर काढा</span>
+            </button>
           </div>
         </div>
 
@@ -962,37 +1119,70 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
         {/* Requests Management Table Card */}
         {activeTab === 'requests' && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            {/* Header & Controls */}
-            <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  School Profiles & Verification Queue
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Review, verify schools, manage subscription durations and process access requests
-                </p>
+            {/* Header & Multi-Dimensional Command Center Filters (District, Cluster, Status, Subscription, Date + Search) */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    School Profiles & Exception Management Queue
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Search by School Name, UDISE, or User/Contact • Filter by District, Cluster/Kendra, Status, Subscription & Date
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Master Directory Excel Export Button */}
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                    title="Download Master Directory as Excel (.xlsx)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Excel Export ({filteredRequests.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={loadData}
+                    disabled={isLoadingCloud}
+                    className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Refresh live data from Supabase Cloud"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCloud ? 'animate-spin text-amber-600' : ''}`} />
+                  </button>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                {/* Search */}
-                <div className="relative">
+              {/* Filter Bar: Search + 5 Operational Filters */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 text-xs">
+                {/* Search: School name, UDISE, User/contact */}
+                <div className="relative lg:col-span-2">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Search school, UDISE, or email..."
+                    placeholder="Search School, UDISE, Headmaster, Email, Phone..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
 
-                {/* District Filter Dropdown */}
+                {/* 1. District Filter */}
                 <select
                   value={districtFilter}
-                  onChange={(e) => setDistrictFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
+                  onChange={(e) => {
+                    setDistrictFilter(e.target.value);
+                    setClusterFilter('all');
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
                 >
-                  <option value="all">All Districts (सर्व जिल्हे)</option>
+                  <option value="all">District: All (सर्व जिल्हे)</option>
                   {availableDistricts.map((d) => (
                     <option key={d} value={d}>
                       {d}
@@ -1000,44 +1190,76 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   ))}
                 </select>
 
-                {/* Master Directory Excel Export Button */}
-                <button
-                  type="button"
-                  onClick={handleExportExcel}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                  title="Download Master Directory as Excel (.xlsx)"
+                {/* 2. Cluster/Kendra Filter */}
+                <select
+                  value={clusterFilter}
+                  onChange={(e) => {
+                    setClusterFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Excel Export</span>
-                </button>
+                  <option value="all">Cluster/Kendra: All (सर्व केंद्रे)</option>
+                  {availableClusters.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
 
-                <button
-                  type="button"
-                  onClick={loadData}
-                  disabled={isLoadingCloud}
-                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
-                  title="Refresh live data from Supabase Cloud"
+                {/* 3. Subscription Tier Filter */}
+                <select
+                  value={subscriptionFilter}
+                  onChange={(e) => {
+                    setSubscriptionFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCloud ? 'animate-spin text-amber-600' : ''}`} />
-                </button>
+                  <option value="all">Subscription: All Tiers</option>
+                  <option value="TRIAL">TRIAL (14-Day Trial)</option>
+                  <option value="ACTIVE">ACTIVE (Paid/Full)</option>
+                  <option value="EXPIRING">EXPIRING (≤ 15 Days)</option>
+                  <option value="EXPIRED">EXPIRED (Past Due)</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+
+                {/* 4. Date Filter */}
+                <select
+                  value={dateFilter}
+                  onChange={(e) => {
+                    setDateFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 cursor-pointer"
+                >
+                  <option value="all">Date: All Time</option>
+                  <option value="today">Today (आज)</option>
+                  <option value="7d">Last 7 Days (मागील ७ दिवस)</option>
+                  <option value="30d">Last 30 Days (मागील ३० दिवस)</option>
+                </select>
               </div>
             </div>
 
-            {/* 5. Review Queue Sub-tabs (Requirement 5) */}
+            {/* 5. Status / Review Queue Sub-tabs */}
             <div className="flex items-center gap-1.5 p-3 border-b border-slate-200 bg-slate-50/70 overflow-x-auto">
               {[
                 { id: 'pending', label: 'प्रलंबित (Pending)', count: queueCounts.pending, color: 'text-amber-800 bg-amber-100' },
                 { id: 'needs_info', label: 'माहिती आवश्यक (Needs Info)', count: queueCounts.needs_info, color: 'text-purple-800 bg-purple-100' },
                 { id: 'verified', label: 'पडताळणी पूर्ण (Verified)', count: queueCounts.verified, color: 'text-emerald-800 bg-emerald-100' },
-                { id: 'rejected', label: 'नाकारलेले (Rejected)', count: queueCounts.rejected, color: 'text-rose-800 bg-rose-100' },
                 { id: 'expiring', label: 'मुदत संपत आलेले (Expiring)', count: queueCounts.expiring, color: 'text-orange-800 bg-orange-100' },
+                { id: 'expired', label: 'मुदत संपलेले (Expired)', count: queueCounts.expired, color: 'text-rose-800 bg-rose-100' },
+                { id: 'rejected', label: 'नाकारलेले (Rejected)', count: queueCounts.rejected, color: 'text-rose-800 bg-rose-100' },
                 { id: 'suspended', label: 'निलंबित (Suspended)', count: queueCounts.suspended, color: 'text-slate-800 bg-slate-200' },
                 { id: 'all', label: 'सर्व शाळा (All)', count: queueCounts.all, color: 'text-slate-700 bg-slate-100' },
               ].map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setStatusFilter(tab.id)}
+                  onClick={() => {
+                    setStatusFilter(tab.id);
+                    setCurrentPage(1);
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                     statusFilter === tab.id
                       ? 'bg-slate-900 text-white shadow-xs'
@@ -1122,12 +1344,12 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                         onClick={toggleSelectAllVisible}
                         className="p-1 rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                         title={
-                          filteredRequests.length > 0 && filteredRequests.every((r) => selectedIds.includes(r.id))
-                            ? 'Deselect all'
-                            : 'Select all visible'
+                          paginatedRequests.length > 0 && paginatedRequests.every((r) => selectedIds.includes(r.id))
+                            ? 'Deselect current page'
+                            : 'Select current page'
                         }
                       >
-                        {filteredRequests.length > 0 && filteredRequests.every((r) => selectedIds.includes(r.id)) ? (
+                        {paginatedRequests.length > 0 && paginatedRequests.every((r) => selectedIds.includes(r.id)) ? (
                           <CheckSquare className="w-4 h-4 text-amber-700" />
                         ) : (
                           <Square className="w-4 h-4 text-slate-400" />
@@ -1139,19 +1361,19 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                     <th className="py-3 px-4">Applicant & Role</th>
                     <th className="py-3 px-4">Referral</th>
                     <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Verification & Status</th>
+                    <th className="py-3 px-4">Verification & Subscription</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredRequests.length === 0 ? (
+                  {paginatedRequests.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-8 text-center text-slate-400">
-                        No requests or profiles found in this queue.
+                        No requests or profiles found matching current filters.
                       </td>
                     </tr>
                   ) : (
-                    filteredRequests.map((req) => {
+                    paginatedRequests.map((req) => {
                       const isPending = req.status === 'pending' || req.verificationStatus === 'PENDING';
                       const isNeedsInfo = req.verificationStatus === 'MORE_INFO_REQUIRED';
                       const isActive = req.status === 'active' || req.verificationStatus === 'VERIFIED';
@@ -1263,9 +1485,22 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                 }`}>
                                   {req.verificationStatus || 'PENDING'}
                                 </span>
-                                {req.expiresAt && isActive && (
+                                {req.subscriptionStatus && (
+                                  <span className={`px-1.5 py-0.5 rounded font-bold ${
+                                    req.subscriptionStatus === 'EXPIRING'
+                                      ? 'bg-orange-100 text-orange-800'
+                                      : req.subscriptionStatus === 'EXPIRED'
+                                      ? 'bg-rose-100 text-rose-800'
+                                      : req.subscriptionStatus === 'TRIAL'
+                                      ? 'bg-sky-100 text-sky-800'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    {req.subscriptionStatus}
+                                  </span>
+                                )}
+                                {req.expiresAt && (isActive || req.status === 'expired') && (
                                   <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono">
-                                    Exp: {new Date(req.expiresAt).toLocaleDateString('mr-IN')}
+                                    Exp: {new Date(req.expiresAt).toLocaleDateString('mr-IN')} ({daysLeft > 0 ? `${daysLeft}d` : 'Expired'})
                                   </span>
                                 )}
                               </div>
@@ -1301,7 +1536,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                                 </>
                               )}
 
-                              {isActive && !isNeedsInfo && (
+                              {(isActive || req.status === 'expired') && !isNeedsInfo && (
                                 <div className="flex items-center gap-1">
                                   <button
                                     type="button"
@@ -1383,6 +1618,59 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Footer for Large Datasets (Requirement 1 & 9) */}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <span>
+                  Showing{' '}
+                  <strong className="text-slate-900 font-mono">
+                    {filteredRequests.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}
+                  </strong>{' '}
+                  to{' '}
+                  <strong className="text-slate-900 font-mono">
+                    {Math.min(safeCurrentPage * pageSize, filteredRequests.length)}
+                  </strong>{' '}
+                  of{' '}
+                  <strong className="text-slate-900 font-mono">{filteredRequests.length}</strong>{' '}
+                  schools
+                </span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="ml-2 px-2 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 font-medium cursor-pointer"
+                >
+                  <option value={25}>25 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold disabled:opacity-40 cursor-pointer"
+                >
+                  Previous
+                </button>
+                <span className="px-2.5 py-1 font-mono font-bold text-slate-800">
+                  Page {safeCurrentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold disabled:opacity-40 cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         )}

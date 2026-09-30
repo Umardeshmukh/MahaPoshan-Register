@@ -3,7 +3,7 @@ export type LanguageMode = 'mr' | 'en' | 'dual';
 export type UserRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'TEACHER';
 export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'MORE_INFO_REQUIRED' | 'REJECTED';
 export type AccessStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED';
-export type SubscriptionTierStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+export type SubscriptionTierStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED' | 'CANCELLED';
 
 export interface SchoolMembership {
   id?: string;
@@ -28,6 +28,7 @@ export interface SchoolProfile {
   headmasterName: string;
   inchargeTeacher: string;
   cookName: string;
+  role?: UserRole;
   verificationStatus?: VerificationStatus;
   accessStatus?: AccessStatus;
   subscriptionStatus?: SubscriptionTierStatus;
@@ -202,8 +203,40 @@ export interface AppConfig {
   states: StateNormConfig;
 }
 
+export interface ExportMetadata {
+  schemaVersion: string;
+  appVersion: string;
+  exportedAt: string;
+  schoolId?: string;
+  udiseNumber: string;
+  schoolName: string;
+  exportedByUserId?: string;
+  exportedByRole?: UserRole;
+  recordCounts: {
+    dailyEntries: number;
+    stockMonths?: number;
+    stockInwardMonths?: number;
+  };
+}
+
+export interface SuperAdminKpiSummary {
+  pendingRequests: number;
+  needsInformation: number;
+  verifiedSchools: number;
+  activeSchools: number;
+  trialSchools: number;
+  expiringSubscriptions: number;
+  expiredSubscriptions: number;
+  suspendedSchools: number;
+  newSchools: number;
+  newSchoolsLast7Days?: number;
+  pendingReferralPayouts: number;
+  paidReferralRewards: number;
+}
+
 export interface AppData {
   config?: AppConfig; // The central configuration node for rates, menu, general settings, and states
+  exportMetadata?: ExportMetadata;
   profile: SchoolProfile;
   ingredients: Ingredient[];
   recipes: DishRecipe[];
@@ -261,10 +294,11 @@ export interface UserAccessRequest {
   resubmittedAt?: string;
   clerkUserId: string;
   userEmail: string;
-  userName: string;
+  userName?: string;
   schoolName: string;
   udiseNumber: string;
-  centerCluster: string;
+  centerCluster?: string;
+  taluka?: string;
   district: string;
   phone?: string;
   status: SubscriptionStatus;

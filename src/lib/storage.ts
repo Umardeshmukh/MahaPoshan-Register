@@ -7,6 +7,8 @@ import {
   DishRecipe,
   LanguageMode,
   AppConfig,
+  ExportMetadata,
+  UserRole,
 } from '../types';
 import {
   DEFAULT_SCHOOL_PROFILE,
@@ -14,8 +16,92 @@ import {
   DEFAULT_RECIPES,
 } from './constants';
 import { calculateDayConsumption, getDayInfo } from './mdm-calculator';
+import { logStructuredEvent } from './observability';
+import { recordStateTransitionAudit } from './subscription-store';
 
 const STORAGE_KEY = 'pm_poshan_mdm_data_v1';
+export const EXPORT_SCHEMA_VERSION = '2.0.0';
+export const APP_RELEASE_VERSION = '2.4.0';
+
+/**
+ * StorageEngineAdapter prepares the local-first persistence layer for seamless
+ * IndexedDB migration when multi-year school registers approach localStorage's 5MB quota,
+ * without breaking synchronous reads required by the current UI.
+ */
+export interface StorageEngineAdapter {
+  readonly backendName: 'localStorage' | 'indexedDB-hybrid';
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  getItemAsync(key: string): Promise<string | null>;
+  setItemAsync(key: string, value: string): Promise<void>;
+  getUsageBytes(): number;
+  isNearQuotaLimit(): boolean;
+}
+
+class LocalStorageEngineAdapter implements StorageEngineAdapter {
+  readonly backendName = 'localStorage' as const;
+  private readonly QUOTA_WARN_BYTES = 3.5 * 1024 * 1024; // 3.5 MB warning threshold
+
+  getItem(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  setItem(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      logStructuredEvent({
+        category: 'SYNC_FAILURE',
+        level: 'error',
+        message: `LocalStorage write failed for key ${key} (quota or storage error)`,
+        context: { key, byteLength: value.length, error: String(err) },
+      });
+    }
+  }
+
+  removeItem(key: string): void {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+
+  async getItemAsync(key: string): Promise<string | null> {
+    return this.getItem(key);
+  }
+
+  async setItemAsync(key: string, value: string): Promise<void> {
+    this.setItem(key, value);
+  }
+
+  getUsageBytes(): number {
+    try {
+      let total = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) {
+          const v = localStorage.getItem(k) || '';
+          total += (k.length + v.length) * 2;
+        }
+      }
+      return total;
+    } catch {
+      return 0;
+    }
+  }
+
+  isNearQuotaLimit(): boolean {
+    return this.getUsageBytes() >= this.QUOTA_WARN_BYTES;
+  }
+}
+
+export const storageEngine: StorageEngineAdapter = new LocalStorageEngineAdapter();
 
 export function createDefaultAppConfig(
   profile: SchoolProfile = DEFAULT_SCHOOL_PROFILE,
@@ -378,21 +464,185 @@ export function clearRegisterEntries(data: AppData): AppData {
 
 
 
-export function exportDataAsJSON(data: AppData): void {
-  const synced = syncAppDataConfig(data);
-  const jsonStr = JSON.stringify(synced, null, 2);
-  const blob = new Blob([jsonStr], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `PM_POSHAN_MDM_Data_${synced.profile.udiseNumber || 'school'}_${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+export interface ExportOptions {
+  userId?: string;
+  userRole?: UserRole;
+  requestedSchoolId?: string;
+  requestedUdise?: string;
+}
+
+/**
+ * Validates tenant isolation, strips any foreign school records, attaches schema/version metadata,
+ * and records an immutable audit log for the school data export.
+ */
+export function prepareValidatedExportPayload(
+  data: AppData,
+  options?: ExportOptions
+): { success: boolean; payload?: AppData; error?: string } {
+  try {
+    const synced = syncAppDataConfig(data);
+    const ownSchoolId = synced.profile?.id || '';
+    const ownUdise = (synced.profile?.udiseNumber || '').trim();
+    const effectiveRole: UserRole = options?.userRole || synced.profile?.role || 'SCHOOL_ADMIN';
+    const effectiveUserId = options?.userId || 'local_school_admin';
+
+    // Enforce strict tenant boundary: SCHOOL_ADMIN and TEACHER can ONLY export their own school
+    if (effectiveRole !== 'SUPER_ADMIN') {
+      if (
+        options?.requestedSchoolId &&
+        options.requestedSchoolId !== ownSchoolId &&
+        options.requestedSchoolId !== ownUdise
+      ) {
+        const errMsg = 'Security Violation: SCHOOL_ADMIN can only export their own school data';
+        logStructuredEvent({
+          category: 'EXPORT_FAILURE',
+          level: 'error',
+          message: errMsg,
+          userId: effectiveUserId,
+          schoolId: ownSchoolId || ownUdise,
+          context: {
+            effectiveRole,
+            ownSchoolId,
+            ownUdise,
+            requestedSchoolId: options.requestedSchoolId,
+          },
+        });
+        return { success: false, error: errMsg };
+      }
+
+      if (options?.requestedUdise && options.requestedUdise.trim() !== ownUdise) {
+        const errMsg = 'Security Violation: Cross-school export by UDISE is strictly prohibited';
+        logStructuredEvent({
+          category: 'EXPORT_FAILURE',
+          level: 'error',
+          message: errMsg,
+          userId: effectiveUserId,
+          schoolId: ownSchoolId || ownUdise,
+          context: {
+            effectiveRole,
+            ownUdise,
+            requestedUdise: options.requestedUdise,
+          },
+        });
+        return { success: false, error: errMsg };
+      }
+    }
+
+    // Filter dailyEntries so no foreign school's records can ever be included in the export
+    const filteredDailyEntries: Record<string, DailyRegisterEntry> = {};
+    let strippedCount = 0;
+
+    for (const [dateKey, entry] of Object.entries(synced.dailyEntries || {})) {
+      const entrySchoolId = entry.schoolId;
+      const belongsToOwnSchool =
+        !entrySchoolId ||
+        entrySchoolId === ownSchoolId ||
+        entrySchoolId === ownUdise;
+
+      if (belongsToOwnSchool) {
+        filteredDailyEntries[dateKey] = entry;
+      } else {
+        strippedCount++;
+      }
+    }
+
+    if (strippedCount > 0) {
+      logStructuredEvent({
+        category: 'SECURITY_VIOLATION',
+        level: 'warn',
+        message: `Stripped ${strippedCount} foreign school daily entries during export`,
+        userId: effectiveUserId,
+        schoolId: ownSchoolId || ownUdise,
+        context: { strippedCount },
+      });
+    }
+
+    const exportMetadata: ExportMetadata = {
+      schemaVersion: EXPORT_SCHEMA_VERSION,
+      appVersion: APP_RELEASE_VERSION,
+      exportedAt: new Date().toISOString(),
+      schoolId: ownSchoolId || ownUdise || 'local_school',
+      udiseNumber: ownUdise,
+      schoolName: synced.profile?.schoolName || '',
+      exportedByUserId: effectiveUserId,
+      exportedByRole: effectiveRole,
+      recordCounts: {
+        dailyEntries: Object.keys(filteredDailyEntries).length,
+        stockMonths: Object.keys(synced.stockInward || {}).length,
+      },
+    };
+
+    const payload: AppData = {
+      ...synced,
+      dailyEntries: filteredDailyEntries,
+      exportMetadata,
+    };
+
+    // Audit the export
+    recordStateTransitionAudit({
+      requestId: `export_${ownUdise || 'school'}_${Date.now()}`,
+      schoolId: exportMetadata.schoolId,
+      userId: effectiveUserId,
+      adminId: effectiveUserId,
+      previousStatus: 'DATA_ACTIVE',
+      newStatus: 'DATA_EXPORTED',
+      reason: `School data exported (schema v${EXPORT_SCHEMA_VERSION}, ${exportMetadata.recordCounts.dailyEntries} daily entries)`,
+      timestamp: exportMetadata.exportedAt,
+    });
+
+    logStructuredEvent({
+      category: 'EXPORT_AUDIT',
+      level: 'info',
+      message: `Audited school data export completed for UDISE ${ownUdise || 'N/A'}`,
+      userId: effectiveUserId,
+      schoolId: exportMetadata.schoolId,
+      context: {
+        schemaVersion: exportMetadata.schemaVersion,
+        appVersion: exportMetadata.appVersion,
+        exportedByRole: effectiveRole,
+        recordCounts: exportMetadata.recordCounts,
+      },
+    });
+
+    return { success: true, payload };
+  } catch (err) {
+    logStructuredEvent({
+      category: 'EXPORT_FAILURE',
+      level: 'error',
+      message: 'Failed preparing school data export',
+      context: { error: String(err) },
+    });
+    return { success: false, error: String(err) };
+  }
+}
+
+export function exportDataAsJSON(
+  data: AppData,
+  options?: ExportOptions
+): { success: boolean; payload?: AppData; error?: string } {
+  const result = prepareValidatedExportPayload(data, options);
+  if (!result.success || !result.payload) {
+    return result;
+  }
+
+  if (typeof document !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+    const jsonStr = JSON.stringify(result.payload, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `PM_POSHAN_MDM_Data_${result.payload.profile.udiseNumber || 'school'}_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  return result;
 }
 
 export function exportConfigAsJSON(config: AppConfig, schoolName?: string): void {
+  if (typeof document === 'undefined') return;
   const jsonStr = JSON.stringify(config, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
   const url = URL.createObjectURL(blob);

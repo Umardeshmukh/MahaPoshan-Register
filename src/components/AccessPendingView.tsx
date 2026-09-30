@@ -114,14 +114,44 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
     }
   }, [referralCode, user?.id]);
 
-  // Periodically check live approval status from Supabase Cloud
+  // Visibility-aware adaptive backoff status check (replaces fixed 10s polling for scale)
   useEffect(() => {
-    if (status !== 'active') {
-      const interval = setInterval(() => {
+    if (status === 'active') return;
+
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let currentDelayMs = 15000; // Start at 15s, scale up to 90s max
+    let isCancelled = false;
+
+    const scheduleNextCheck = () => {
+      if (isCancelled) return;
+      timerId = setTimeout(() => {
+        if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+          onRefresh();
+          currentDelayMs = Math.min(90000, Math.round(currentDelayMs * 1.5));
+        }
+        scheduleNextCheck();
+      }, currentDelayMs);
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        currentDelayMs = 15000;
         onRefresh();
-      }, 10000);
-      return () => clearInterval(interval);
+      }
+    };
+
+    scheduleNextCheck();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
     }
+
+    return () => {
+      isCancelled = true;
+      if (timerId) clearTimeout(timerId);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
   }, [status, onRefresh]);
 
   const openLegalDoc = (tab: LegalDocType) => {
@@ -393,8 +423,39 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-lg mx-auto">
                 आपल्या शाळेसाठी देण्यात आलेली प्रवेश मुदत संपली आहे.
-                पुढील नोंदणी व वापरासाठी कृपया सदस्यत्व नूतनीकरण करा किंवा ॲडमिनशी संपर्क साधा.
+                पुढील दैनंदिन नोंदणी व वापरासाठी कृपया खालील बटणाद्वारे सदस्यत्व नूतनीकरण (Renewal) करा.
               </p>
+
+              <div className="mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 max-w-lg mx-auto flex items-start gap-2.5 text-left">
+                <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">आपल्या शाळेचा संपूर्ण डेटा १००% सुरक्षित आहे (School Data Preserved)</p>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    सदस्यत्व मुदत संपली तरीही आपल्या शाळेची दैनंदिन नोंदवही, धान्य साठा व प्रोफाईल माहिती कधीही डिलीट केली जात नाही. नूतनीकरण होताच सर्व नोंदी जशास तशा उपलब्ध होतील.
+                  </p>
+                </div>
+              </div>
+
+              {initialRequest && (
+                <div className="mt-4 text-left bg-slate-50 rounded-xl p-4 border border-slate-200 max-w-lg mx-auto text-xs space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">शाळेचे नाव:</span>
+                    <span className="font-semibold text-slate-900">{initialRequest.schoolName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">UDISE क्रमांक:</span>
+                    <span className="font-mono font-semibold text-slate-900">{initialRequest.udiseNumber}</span>
+                  </div>
+                  {initialRequest.expiresAt && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">संपलेली मुदत:</span>
+                      <span className="font-mono font-semibold text-rose-700">
+                        {new Date(initialRequest.expiresAt).toLocaleDateString('mr-IN')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <button
@@ -403,7 +464,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                   className="px-5 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center gap-2"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  <span>नूतनीकरणासाठी विनंती पाठवा</span>
+                  <span>नूतनीकरणासाठी विनंती पाठवा (Request Renewal)</span>
                 </button>
                 <button
                   type="button"

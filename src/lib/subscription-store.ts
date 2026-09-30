@@ -9,10 +9,13 @@ import {
   AutoValidationResult,
   SchoolValidationDetails,
   StateTransitionAudit,
+  SuperAdminKpiSummary,
+  ReferralRecord,
 } from '../types';
 import {
   recordReferralRegistration,
   syncReferralStatusWithSubscription,
+  getAllReferrals,
 } from './referral-store';
 import {
   purgeUserDataFromCloud,
@@ -30,7 +33,11 @@ import {
   sendTeacherJoinedNotification,
   sendSubscriptionExpiryAlert,
   sendSchoolRegistrationConfirmation,
+  sendRenewalConfirmationEmail,
+  sendTeacherInvitationEmail,
+  sendInvitationExpiryEmail,
 } from './email-service';
+import { logStructuredEvent } from './observability';
 
 const REQUESTS_STORAGE_KEY = 'pm_poshan_access_requests_v1';
 const NOTIFICATIONS_STORAGE_KEY = 'pm_poshan_admin_notifications_v1';
@@ -92,6 +99,118 @@ function purgeExpiredDeletions(requests: UserAccessRequest[]): UserAccessRequest
   return retained;
 }
 
+/**
+ * Automatically evaluates subscription lifecycle transitions:
+ * TRIAL -> ACTIVE -> EXPIRING (<= 15 days left) -> EXPIRED (<= 0 days left)
+ * Sends deduplicated reminders and blocks normal app access when expired while preserving all school data.
+ */
+export function runSubscriptionLifecycleAutomation(
+  requests: UserAccessRequest[]
+): UserAccessRequest[] {
+  const now = Date.now();
+  let changed = false;
+
+  const updated = requests.map((r) => {
+    // Only evaluate active or expiring subscriptions that have an expiry date
+    if ((r.status === 'active' || r.accessStatus === 'ACTIVE') && r.expiresAt) {
+      const expiryTime = new Date(r.expiresAt).getTime();
+      if (isNaN(expiryTime)) return r;
+
+      const diffDays = Math.ceil((expiryTime - now) / (1000 * 60 * 60 * 24));
+
+      // Transition to EXPIRED when past due (Never delete school data!)
+      if (diffDays <= 0 && (r.status !== 'expired' || r.subscriptionStatus !== 'EXPIRED')) {
+        changed = true;
+        const prevSubStatus = r.subscriptionStatus || 'ACTIVE';
+        const expiredReq: UserAccessRequest = {
+          ...r,
+          status: 'expired',
+          accessStatus: 'EXPIRED',
+          subscriptionStatus: 'EXPIRED',
+        };
+
+        recordStateTransitionAudit({
+          requestId: r.id,
+          schoolId: r.schoolId,
+          userId: r.clerkUserId,
+          adminId: 'system_lifecycle_automation',
+          previousStatus: prevSubStatus,
+          newStatus: 'EXPIRED',
+          reason: 'Subscription period ended automatically (school data preserved)',
+          timestamp: new Date().toISOString(),
+        });
+
+        logStructuredEvent({
+          category: 'SUBSCRIPTION_LIFECYCLE',
+          level: 'warn',
+          message: `Subscription expired automatically for school ${r.schoolName}`,
+          schoolId: r.schoolId || r.id,
+          userId: r.clerkUserId,
+          context: { udiseNumber: r.udiseNumber, previousStatus: prevSubStatus, expiresAt: r.expiresAt },
+        });
+
+        if (r.userEmail) {
+          sendSubscriptionExpiryAlert({
+            schoolName: r.schoolName,
+            userEmail: r.userEmail,
+            expiresAt: r.expiresAt,
+            daysLeft: 0,
+          }).catch((err) => console.warn('Expiry alert email notice:', err));
+        }
+
+        return expiredReq;
+      }
+
+      // Transition to EXPIRING when within 15 days of expiry
+      if (diffDays > 0 && diffDays <= 15 && r.subscriptionStatus !== 'EXPIRING') {
+        changed = true;
+        const prevSubStatus = r.subscriptionStatus || 'ACTIVE';
+        const expiringReq: UserAccessRequest = {
+          ...r,
+          subscriptionStatus: 'EXPIRING',
+        };
+
+        recordStateTransitionAudit({
+          requestId: r.id,
+          schoolId: r.schoolId,
+          userId: r.clerkUserId,
+          adminId: 'system_lifecycle_automation',
+          previousStatus: prevSubStatus,
+          newStatus: 'EXPIRING',
+          reason: `Upcoming subscription expiry detected (${diffDays} days remaining)`,
+          timestamp: new Date().toISOString(),
+        });
+
+        logStructuredEvent({
+          category: 'SUBSCRIPTION_LIFECYCLE',
+          level: 'info',
+          message: `Subscription entering EXPIRING window (${diffDays} days left) for ${r.schoolName}`,
+          schoolId: r.schoolId || r.id,
+          userId: r.clerkUserId,
+          context: { udiseNumber: r.udiseNumber, daysRemaining: diffDays, expiresAt: r.expiresAt },
+        });
+
+        if (r.userEmail) {
+          sendSubscriptionExpiryAlert({
+            schoolName: r.schoolName,
+            userEmail: r.userEmail,
+            expiresAt: r.expiresAt,
+            daysLeft: diffDays,
+          }).catch((err) => console.warn('Upcoming expiry reminder notice:', err));
+        }
+
+        return expiringReq;
+      }
+    }
+    return r;
+  });
+
+  if (changed) {
+    saveRequests(updated);
+  }
+  return updated;
+}
+
 function loadRequests(): UserAccessRequest[] {
   try {
     const raw = localStorage.getItem(REQUESTS_STORAGE_KEY);
@@ -101,7 +220,8 @@ function loadRequests(): UserAccessRequest[] {
     }
     const parsed: UserAccessRequest[] = JSON.parse(raw);
     const cleaned = parsed.filter((r) => !r.id.startsWith('req_seed_'));
-    return purgeExpiredDeletions(cleaned);
+    const afterPurge = purgeExpiredDeletions(cleaned);
+    return runSubscriptionLifecycleAutomation(afterPurge);
   } catch (e) {
     console.error('Failed to load access requests from localStorage', e);
     return [];
@@ -217,7 +337,16 @@ export function verifyAdminCredentials(email: string, pass: string): boolean {
   const isPassValid =
     pass === config.passcode || pass === DEFAULT_SUPER_ADMIN_PASSCODE;
 
-  return isEmailValid && isPassValid;
+  const isValid = isEmailValid && isPassValid;
+  if (!isValid) {
+    logStructuredEvent({
+      category: 'AUTH_FAILURE',
+      level: 'warn',
+      message: `Failed Super Admin authentication attempt for email: ${normalizedEmail || 'empty'}`,
+      context: { attemptedEmail: normalizedEmail, isEmailValid, password: pass },
+    });
+  }
+  return isValid;
 }
 
 export function isAdminAuthenticated(): boolean {
@@ -337,10 +466,14 @@ export function getUserAccessStatus(
 
 const AUDIT_STORAGE_KEY = 'pm_poshan_audit_logs_v1';
 
-export function getAuditLogs(): StateTransitionAudit[] {
+export function getAuditLogs(requestId?: string): StateTransitionAudit[] {
   try {
     const raw = localStorage.getItem(AUDIT_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const logs: StateTransitionAudit[] = raw ? JSON.parse(raw) : [];
+    if (requestId) {
+      return logs.filter((l) => l.requestId === requestId);
+    }
+    return logs;
   } catch {
     return [];
   }
@@ -595,7 +728,15 @@ export function approveAccessRequest(
 ): UserAccessRequest | null {
   const requests = loadRequests();
   const reqIndex = requests.findIndex((r) => r.id === requestId);
-  if (reqIndex === -1) return null;
+  if (reqIndex === -1) {
+    logStructuredEvent({
+      category: 'APPROVAL_FAILURE',
+      level: 'error',
+      message: `Approval failed: request ${requestId} not found`,
+      context: { requestId, durationMonths, adminId },
+    });
+    return null;
+  }
 
   const effectiveIsTrial = isTrial || durationMonths === 0;
   const now = new Date();
@@ -999,36 +1140,320 @@ export async function checkCloudAccessStatus(
 }
 
 /**
- * Extend active subscription duration
+ * Extend or renew subscription duration (transitions TRIAL/EXPIRING/EXPIRED -> ACTIVE)
+ * Audits the extension and sends automated renewal confirmation email.
  */
 export function extendSubscription(
   requestId: string,
-  extraMonths: number
+  extraMonths: number,
+  adminId: string = DEFAULT_SUPER_ADMIN_EMAIL
 ): UserAccessRequest | null {
+  if (extraMonths <= 0 || extraMonths > 120) {
+    logStructuredEvent({
+      category: 'SUBSCRIPTION_FAILURE',
+      level: 'error',
+      message: `Invalid subscription extension duration requested: ${extraMonths} months`,
+      context: { requestId, extraMonths, adminId },
+    });
+    return null;
+  }
+
   const requests = loadRequests();
   const reqIndex = requests.findIndex((r) => r.id === requestId);
-  if (reqIndex === -1) return null;
+  if (reqIndex === -1) {
+    logStructuredEvent({
+      category: 'SUBSCRIPTION_FAILURE',
+      level: 'warn',
+      message: `Cannot extend subscription: request ${requestId} not found`,
+      context: { requestId, extraMonths },
+    });
+    return null;
+  }
 
   const current = requests[reqIndex];
-  const baseDate = current.expiresAt && new Date(current.expiresAt) > new Date()
-    ? new Date(current.expiresAt)
-    : new Date();
+  const previousStatus = current.subscriptionStatus || current.status;
+  const baseDate =
+    current.expiresAt && new Date(current.expiresAt) > new Date()
+      ? new Date(current.expiresAt)
+      : new Date();
 
   baseDate.setMonth(baseDate.getMonth() + extraMonths);
+  const newExpiresAt = baseDate.toISOString();
 
   requests[reqIndex] = {
     ...current,
     status: 'active',
+    verificationStatus: 'VERIFIED',
+    accessStatus: 'ACTIVE',
+    subscriptionStatus: 'ACTIVE',
     durationMonths: (current.durationMonths || 0) + extraMonths,
-    expiresAt: baseDate.toISOString(),
+    expiresAt: newExpiresAt,
   };
 
   saveRequests(requests);
-  if (requests[reqIndex].clerkUserId) {
-    invalidateAccessStatusCache(requests[reqIndex].clerkUserId);
+
+  recordStateTransitionAudit({
+    requestId: current.id,
+    schoolId: current.schoolId,
+    userId: current.clerkUserId,
+    adminId,
+    previousStatus,
+    newStatus: 'ACTIVE',
+    reason: `Subscription renewed/extended by +${extraMonths} months (until ${newExpiresAt.slice(0, 10)})`,
+    timestamp: new Date().toISOString(),
+  });
+
+  logStructuredEvent({
+    category: 'SUBSCRIPTION_LIFECYCLE',
+    level: 'info',
+    message: `Subscription renewed/extended by ${extraMonths} months for ${current.schoolName}`,
+    schoolId: current.schoolId || current.id,
+    userId: current.clerkUserId,
+    context: { previousStatus, newStatus: 'ACTIVE', extraMonths, expiresAt: newExpiresAt },
+  });
+
+  if (current.clerkUserId) {
+    updateSchoolStatusInCloud(
+      current.clerkUserId,
+      'active',
+      requests[reqIndex].durationMonths,
+      newExpiresAt,
+      {
+        verificationStatus: 'VERIFIED',
+        accessStatus: 'ACTIVE',
+        subscriptionStatus: 'ACTIVE',
+        schoolId: current.schoolId,
+      }
+    ).catch((err) => console.warn('Cloud subscription renewal sync warning:', err));
+    invalidateAccessStatusCache(current.clerkUserId);
   }
+
+  if (current.userEmail) {
+    sendRenewalConfirmationEmail({
+      schoolName: current.schoolName,
+      userEmail: current.userEmail,
+      additionalMonths: extraMonths,
+      newExpiresAt,
+    }).catch((err) => console.warn('Renewal confirmation email warning:', err));
+  }
+
+  syncReferralStatusWithSubscription(requestId, 'active');
   syncAllRequestsCache = null;
   return requests[reqIndex];
+}
+
+/**
+ * Computes all 11 Super Admin Command Center KPIs from requests and referrals.
+ */
+export function computeSuperAdminKpis(
+  requestsInput?: UserAccessRequest[],
+  referralsInput?: ReferralRecord[]
+): SuperAdminKpiSummary {
+  const requests = requestsInput || loadRequests();
+  const referrals = referralsInput || getAllReferrals();
+  const now = Date.now();
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+  let pendingRequests = 0;
+  let needsInformation = 0;
+  let verifiedSchools = 0;
+  let activeSchools = 0;
+  let trialSchools = 0;
+  let expiringSubscriptions = 0;
+  let expiredSubscriptions = 0;
+  let suspendedSchools = 0;
+  let newSchools = 0;
+
+  for (const r of requests) {
+    const reqTime = new Date(r.requestedAt).getTime();
+    if (!isNaN(reqTime) && reqTime >= sevenDaysAgo) {
+      newSchools++;
+    }
+
+    if (r.verificationStatus === 'MORE_INFO_REQUIRED') {
+      needsInformation++;
+    } else if (r.status === 'pending' || r.verificationStatus === 'PENDING') {
+      pendingRequests++;
+    }
+
+    if (r.verificationStatus === 'VERIFIED' || r.status === 'active' || r.status === 'expired') {
+      verifiedSchools++;
+    }
+
+    if (r.status === 'rejected' || r.status === 'pending_deletion' || r.accessStatus === 'SUSPENDED') {
+      suspendedSchools++;
+      continue;
+    }
+
+    const diffDays = r.expiresAt
+      ? Math.ceil((new Date(r.expiresAt).getTime() - now) / (1000 * 60 * 60 * 24))
+      : 365;
+
+    if (r.status === 'expired' || r.subscriptionStatus === 'EXPIRED' || (r.expiresAt && diffDays <= 0)) {
+      expiredSubscriptions++;
+    } else if (r.status === 'active') {
+      activeSchools++;
+      if (r.subscriptionStatus === 'TRIAL') {
+        trialSchools++;
+      }
+      if (r.subscriptionStatus === 'EXPIRING' || (diffDays > 0 && diffDays <= 15)) {
+        expiringSubscriptions++;
+      }
+    }
+  }
+
+  const pendingReferralPayouts = referrals.filter((ref) => ref.rewardStatus === 'eligible').length;
+  const paidReferralRewards = referrals.filter((ref) => ref.rewardStatus === 'paid').length;
+
+  return {
+    pendingRequests,
+    needsInformation,
+    verifiedSchools,
+    activeSchools,
+    trialSchools,
+    expiringSubscriptions,
+    expiredSubscriptions,
+    suspendedSchools,
+    newSchools,
+    newSchoolsLast7Days: newSchools,
+    pendingReferralPayouts,
+    paidReferralRewards,
+  };
+}
+
+export interface TeacherInvitationRecord {
+  id: string;
+  schoolId: string;
+  schoolName: string;
+  udiseNumber: string;
+  invitedEmail: string;
+  invitedByUserId: string;
+  invitedByName: string;
+  role: 'TEACHER';
+  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED';
+  createdAt: string;
+  expiresAt: string;
+}
+
+const INVITATIONS_STORAGE_KEY = 'pm_poshan_teacher_invitations_v1';
+
+export function getTeacherInvitations(schoolId?: string): TeacherInvitationRecord[] {
+  try {
+    const raw = localStorage.getItem(INVITATIONS_STORAGE_KEY);
+    const list: TeacherInvitationRecord[] = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    let changed = false;
+
+    const updated = list.map((inv) => {
+      if (inv.status === 'PENDING' && new Date(inv.expiresAt).getTime() <= now) {
+        changed = true;
+        sendInvitationExpiryEmail({
+          schoolName: inv.schoolName,
+          udiseNumber: inv.udiseNumber,
+          teacherEmail: inv.invitedEmail,
+        }).catch(() => {});
+        return { ...inv, status: 'EXPIRED' as const };
+      }
+      return inv;
+    });
+
+    if (changed) {
+      localStorage.setItem(INVITATIONS_STORAGE_KEY, JSON.stringify(updated));
+    }
+
+    return schoolId ? updated.filter((i) => i.schoolId === schoolId) : updated;
+  } catch {
+    return [];
+  }
+}
+
+export function createTeacherInvitation(params: {
+  schoolId: string;
+  schoolName: string;
+  udiseNumber: string;
+  invitedEmail: string;
+  invitedByUserId: string;
+  invitedByName: string;
+  callerRole: UserRole;
+  expiresInDays?: number;
+}): { success: boolean; invitation?: TeacherInvitationRecord; error?: string } {
+  if (params.callerRole !== 'SCHOOL_ADMIN' && params.callerRole !== 'SUPER_ADMIN') {
+    logStructuredEvent({
+      category: 'SECURITY_VIOLATION',
+      level: 'error',
+      message: 'Unauthorized role attempted to create teacher invitation',
+      userId: params.invitedByUserId,
+      schoolId: params.schoolId,
+      context: { callerRole: params.callerRole, invitedEmail: params.invitedEmail },
+    });
+    return { success: false, error: 'Security Violation: Only SCHOOL_ADMIN or SUPER_ADMIN can invite teachers' };
+  }
+
+  const normalizedEmail = params.invitedEmail.trim().toLowerCase();
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    return { success: false, error: 'Invalid teacher email address' };
+  }
+
+  const existing = getTeacherInvitations(params.schoolId);
+  const pendingForSchool = existing.filter((i) => i.status === 'PENDING');
+  if (pendingForSchool.length >= 15) {
+    logStructuredEvent({
+      category: 'SECURITY_VIOLATION',
+      level: 'warn',
+      message: 'Invitation rate limit exceeded for school',
+      schoolId: params.schoolId,
+      userId: params.invitedByUserId,
+    });
+    return { success: false, error: 'Rate limit exceeded: Maximum 15 pending invitations allowed per school' };
+  }
+
+  const duplicate = pendingForSchool.find((i) => i.invitedEmail.toLowerCase() === normalizedEmail);
+  if (duplicate) {
+    return { success: false, error: 'An active invitation already exists for this teacher email' };
+  }
+
+  const now = new Date();
+  const days = params.expiresInDays ?? 7;
+  const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+
+  const invitation: TeacherInvitationRecord = {
+    id: `inv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    schoolId: params.schoolId,
+    schoolName: params.schoolName,
+    udiseNumber: params.udiseNumber,
+    invitedEmail: normalizedEmail,
+    invitedByUserId: params.invitedByUserId,
+    invitedByName: params.invitedByName,
+    role: 'TEACHER',
+    status: 'PENDING',
+    createdAt: now.toISOString(),
+    expiresAt,
+  };
+
+  const allInvitations = getTeacherInvitations();
+  allInvitations.unshift(invitation);
+  localStorage.setItem(INVITATIONS_STORAGE_KEY, JSON.stringify(allInvitations));
+
+  recordStateTransitionAudit({
+    requestId: invitation.id,
+    schoolId: params.schoolId,
+    userId: params.invitedByUserId,
+    adminId: params.invitedByUserId,
+    previousStatus: 'NONE',
+    newStatus: 'INVITED_TEACHER',
+    reason: `Invited teacher ${normalizedEmail} to school ${params.udiseNumber}`,
+    timestamp: now.toISOString(),
+  });
+
+  sendTeacherInvitationEmail({
+    schoolName: params.schoolName,
+    udiseNumber: params.udiseNumber,
+    teacherEmail: normalizedEmail,
+    invitedByName: params.invitedByName,
+    expiresAt,
+  }).catch(() => {});
+
+  return { success: true, invitation };
 }
 
 /**

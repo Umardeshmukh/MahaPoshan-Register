@@ -66,12 +66,12 @@ DO $$ BEGIN
     CHECK (access_status IN ('PENDING', 'ACTIVE', 'SUSPENDED', 'EXPIRED'));
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- 3. subscription_status: TRIAL, ACTIVE, EXPIRED, CANCELLED
+-- 3. subscription_status: TRIAL, ACTIVE, EXPIRING, EXPIRED, CANCELLED
 ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(30) DEFAULT 'TRIAL';
 DO $$ BEGIN
   ALTER TABLE public.schools DROP CONSTRAINT IF EXISTS chk_schools_subscription_status;
   ALTER TABLE public.schools ADD CONSTRAINT chk_schools_subscription_status 
-    CHECK (subscription_status IN ('TRIAL', 'ACTIVE', 'EXPIRED', 'CANCELLED'));
+    CHECK (subscription_status IN ('TRIAL', 'ACTIVE', 'EXPIRING', 'EXPIRED', 'CANCELLED'));
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 -- 4. Scalable Verification & Auto-Validation Fields (Requirement 2 & 8)
@@ -95,6 +95,11 @@ EXCEPTION WHEN OTHERS THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_schools_udise ON public.schools(udise_number);
 CREATE INDEX IF NOT EXISTS idx_schools_clerk_user_id ON public.schools(clerk_user_id);
 CREATE INDEX IF NOT EXISTS idx_schools_access_status ON public.schools(access_status);
+-- Composite Indexes for Super Admin Command Center Filtering & Subscription Lifecycle Automation
+CREATE INDEX IF NOT EXISTS idx_schools_district_cluster ON public.schools(district, center_cluster);
+CREATE INDEX IF NOT EXISTS idx_schools_status_subscription ON public.schools(verification_status, subscription_status, access_status);
+CREATE INDEX IF NOT EXISTS idx_schools_expires_at ON public.schools(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_schools_created_at_desc ON public.schools(created_at DESC);
 
 -- ------------------------------------------------------------------------------
 -- 3. User -> Membership -> School Relationship
@@ -733,3 +738,12 @@ BEGIN
   ON CONFLICT (clerk_user_id) DO UPDATE SET role = 'SUPER_ADMIN';
 
 END $$;
+
+-- ------------------------------------------------------------------------------
+-- 10. Operational Scalability Composite Indexes (10,000+ Schools Optimization)
+-- ------------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_daily_entries_school_date_desc ON public.daily_entries(school_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_stock_inward_school_month ON public.stock_inward(school_id, month_key);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_school_timestamp_desc ON public.audit_logs(school_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_memberships_user_active ON public.memberships(clerk_user_id, is_active);
+
