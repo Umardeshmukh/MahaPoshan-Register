@@ -42,7 +42,7 @@
 - **In-App Notification Bell:** Real-time badge counter and dropdown history of new school registration requests.
 
 ### 6. 📧 Automated Email Alerts via Resend
-- **Instant Admin Alerts:** Dispatches styled HTML email notifications to `umardesh@gmail.com` when a new school registers or requests renewal.
+- **Instant Admin Alerts:** Dispatches styled HTML email notifications to `poshanregister@gmail.com` when a new school registers or requests renewal.
 - **Approval Confirmations:** Sends confirmation receipts to school teachers upon access approval.
 - **Built-in Test Trigger:** Test Resend API connectivity directly from the Super Admin dashboard.
 
@@ -95,7 +95,7 @@ CLERK_SECRET_KEY=sk_test_...
 # Resend Email Integration
 RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=onboarding@resend.dev
-SUPER_ADMIN_EMAIL=umardesh@gmail.com
+SUPER_ADMIN_EMAIL=poshanregister@gmail.com
 ```
 
 ### 4. Run Development Server

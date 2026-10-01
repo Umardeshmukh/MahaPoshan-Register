@@ -115,7 +115,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                 type="email"
                 required
                 autoFocus
-                placeholder="poshanragister@gmail.com"
+                placeholder="poshanregister@gmail.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);

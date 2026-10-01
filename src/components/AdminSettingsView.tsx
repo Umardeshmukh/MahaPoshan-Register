@@ -1118,11 +1118,11 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                 </div>
               </div>
               <a
-                href="mailto:poshanragister@gmail.com?subject=MahaPoshan%20Settings%20Query"
+                href="mailto:poshanregister@gmail.com?subject=MahaPoshan%20Settings%20Query"
                 className="px-4 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
               >
                 <Mail className="w-3.5 h-3.5" />
-                <span>poshanragister@gmail.com</span>
+                <span>poshanregister@gmail.com</span>
               </a>
             </div>
             {/* 1.4 Admin Login Portal Card */}

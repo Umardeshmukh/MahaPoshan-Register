@@ -29,10 +29,10 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenLegal }) => 
             <div className="pt-1 flex items-center gap-2 text-slate-300">
               <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
               <a
-                href="mailto:poshanragister@gmail.com"
+                href="mailto:poshanregister@gmail.com"
                 className="hover:text-white transition-colors underline font-mono"
               >
-                poshanragister@gmail.com
+                poshanregister@gmail.com
               </a>
             </div>
           </div>

@@ -166,7 +166,7 @@ A centralized configuration suite divided into four specialized pillars:
 
 - **28-Day Soft Deletion Protocol:** Accounts marked for deletion enter a mandatory 28-calendar-day holding pattern, allowing complete recovery in case of accidental requests before final database purge.
 - **Two-Step Confirmation Safety:** Destructive operations (resetting registers or factory resets) require two consecutive confirmation modals displaying exact record impact counts.
-- **Mandatory Legal Transparency:** Full dedicated modals for Terms & Conditions, Privacy Policy, Refund Policy, and Grievance Redressal (`poshanragister@gmail.com`).
+- **Mandatory Legal Transparency:** Full dedicated modals for Terms & Conditions, Privacy Policy, Refund Policy, and Grievance Redressal (`poshanregister@gmail.com`).
 
 ---
 
@@ -202,7 +202,7 @@ VITE_SUPER_ADMIN_PASSCODE=YOUR_ADMIN_SECRET_KEY
 
 # Email Notification API (Serverless / Netlify / Vercel)
 RESEND_API_KEY=re_123456789...
-ADMIN_NOTIFICATION_EMAIL=poshanragister@gmail.com
+ADMIN_NOTIFICATION_EMAIL=poshanregister@gmail.com
 ```
 
 ### 7.3 Build & Verification Commands

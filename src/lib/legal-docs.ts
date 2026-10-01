@@ -195,17 +195,17 @@ export const LEGAL_DOCS: Record<LegalDocType, LegalDocumentContent> = {
         headingEn: '2. Customer Support & Operational Enquiries',
         headingMr: '२. ग्राहक सेवा व तांत्रिक मदत',
         contentEn:
-          '• Official Support & Administrator Email: poshanragister@gmail.com\n• Helpline WhatsApp / Phone: +91 98220 00000 / +91 94230 00000\n• Working Hours: Monday to Saturday, 9:00 AM – 6:00 PM IST',
+          '• Official Support & Administrator Email: poshanregister@gmail.com\n• Helpline WhatsApp / Phone: +91 98220 00000 / +91 94230 00000\n• Working Hours: Monday to Saturday, 9:00 AM – 6:00 PM IST',
         contentMr:
-          '• अधिकृत सपोर्ट व ॲडमिन ईमेल: poshanragister@gmail.com\n• व्हॉट्सॲप / फोन हेल्पलाइन: +91 98220 00000 / +91 94230 00000\n• वेळ: सोमवार ते शनिवार, सकाळी ९ ते संध्याकाळी ६',
+          '• अधिकृत सपोर्ट व ॲडमिन ईमेल: poshanregister@gmail.com\n• व्हॉट्सॲप / फोन हेल्पलाइन: +91 98220 00000 / +91 94230 00000\n• वेळ: सोमवार ते शनिवार, सकाळी ९ ते संध्याकाळी ६',
       },
       {
         headingEn: '3. Grievance Officer & Legal Notice Address',
         headingMr: '३. तक्रार निवारण अधिकारी व कायदेशीर पत्ता',
         contentEn:
-          'In accordance with Information Technology Act 2000 and rules made thereunder, the Grievance Officer for the website is:\n• Name: Designated Compliance Officer\n• Address: Maharashtra, India\n• Email: poshanragister@gmail.com',
+          'In accordance with Information Technology Act 2000 and rules made thereunder, the Grievance Officer for the website is:\n• Name: Designated Compliance Officer\n• Address: Maharashtra, India\n• Email: poshanregister@gmail.com',
         contentMr:
-          'माहिती तंत्रज्ञान कायदा २००० च्या नियमांनुसार तक्रार निवारण अधिकारी:\n• नाव: अनुपालन अधिकारी\n• पत्ता: महाराष्ट्र, भारत\n• ईमेल: poshanragister@gmail.com',
+          'माहिती तंत्रज्ञान कायदा २००० च्या नियमांनुसार तक्रार निवारण अधिकारी:\n• नाव: अनुपालन अधिकारी\n• पत्ता: महाराष्ट्र, भारत\n• ईमेल: poshanregister@gmail.com',
       },
     ],
   },

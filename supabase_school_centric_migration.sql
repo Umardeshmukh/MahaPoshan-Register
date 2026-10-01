@@ -192,7 +192,7 @@ AS $$
     (SELECT role FROM public.memberships WHERE clerk_user_id = requesting_user_id() AND is_active = true LIMIT 1),
     (SELECT role FROM public.user_roles WHERE clerk_user_id = requesting_user_id() AND is_active = true LIMIT 1),
     CASE 
-      WHEN requesting_user_email() IN ('umardesh@gmail.com', 'mahaposhan@gmail.com', 'poshanragister@gmail.com') THEN 'SUPER_ADMIN'
+      WHEN requesting_user_email() IN ('poshanregister@gmail.com', 'umardesh@gmail.com', 'mahaposhan@gmail.com', 'poshanragister@gmail.com') THEN 'SUPER_ADMIN'
       WHEN EXISTS (SELECT 1 FROM public.schools WHERE clerk_user_id = requesting_user_id()) THEN 'SCHOOL_ADMIN'
       ELSE 'TEACHER'
     END
@@ -208,7 +208,7 @@ AS $$
   SELECT COALESCE(
     (SELECT role = 'SUPER_ADMIN' FROM public.memberships WHERE clerk_user_id = requesting_user_id() AND is_active = true LIMIT 1),
     (SELECT role = 'SUPER_ADMIN' FROM public.user_roles WHERE clerk_user_id = requesting_user_id() AND is_active = true LIMIT 1),
-    (requesting_user_email() IN ('umardesh@gmail.com', 'mahaposhan@gmail.com', 'poshanragister@gmail.com')),
+    (requesting_user_email() IN ('poshanregister@gmail.com', 'umardesh@gmail.com', 'mahaposhan@gmail.com', 'poshanragister@gmail.com')),
     false
   );
 $$;

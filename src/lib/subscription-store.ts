@@ -43,7 +43,7 @@ const REQUESTS_STORAGE_KEY = 'pm_poshan_access_requests_v1';
 const NOTIFICATIONS_STORAGE_KEY = 'pm_poshan_admin_notifications_v1';
 const ADMIN_CONFIG_KEY = 'pm_poshan_super_admin_config_v1';
 
-export const DEFAULT_SUPER_ADMIN_EMAIL = 'umardesh@gmail.com';
+export const DEFAULT_SUPER_ADMIN_EMAIL = 'poshanregister@gmail.com';
 export const DEFAULT_SUPER_ADMIN_PASSCODE = 'Admin@1234';
 
 export interface SuperAdminConfig {
@@ -281,7 +281,7 @@ export function getSuperAdminConfig(): SuperAdminConfig {
       return DEFAULT_CONFIG;
     }
     const parsed = JSON.parse(raw);
-    if (parsed.adminEmail === 'poshanragister@gmail.com') {
+    if (parsed.adminEmail === 'poshanragister@gmail.com' || parsed.adminEmail === 'umardesh@gmail.com') {
       parsed.adminEmail = DEFAULT_SUPER_ADMIN_EMAIL;
       localStorage.setItem(ADMIN_CONFIG_KEY, JSON.stringify(parsed));
     }
@@ -307,6 +307,7 @@ export function getAllAccessRequests(): UserAccessRequest[] {
 
 // Testing bypass list: allowed email accounts that automatically bypass admin approval
 export const TEST_BYPASS_APPROVAL_EMAILS: string[] = [
+  'poshanregister@gmail.com',
   'mahaposhan@gmail.com',
   'poshanragister@gmail.com',
   'umardesh@gmail.com',

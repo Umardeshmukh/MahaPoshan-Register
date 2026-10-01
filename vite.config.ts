@@ -62,7 +62,7 @@ function resendDevPlugin(): Plugin {
             const defaultFrom =
               process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
             const defaultTo =
-              process.env.SUPER_ADMIN_EMAIL || 'umardesh@gmail.com';
+              process.env.SUPER_ADMIN_EMAIL || 'poshanregister@gmail.com';
 
             const toAddress = (body.to && typeof body.to === 'string' ? body.to.trim() : defaultTo);
             const fromAddress = (body.from && typeof body.from === 'string' ? body.from.trim() : defaultFrom);

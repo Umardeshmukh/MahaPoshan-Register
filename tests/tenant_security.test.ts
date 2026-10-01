@@ -80,7 +80,7 @@ class TenantSecuritySimulator {
     if (!this.currentUserId) return false;
     if (
       this.currentUserEmail &&
-      ['umardesh@gmail.com', 'mahaposhan@gmail.com', 'poshanragister@gmail.com'].includes(
+      ['umardesh@gmail.com', 'mahaposhan@gmail.com', 'poshanregister@gmail.com', 'poshanragister@gmail.com'].includes(
         this.currentUserEmail.toLowerCase()
       )
     ) {

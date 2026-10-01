@@ -185,7 +185,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
     e.preventDefault();
     const updated = {
       passcode: settingsPasscode.trim() || DEFAULT_SUPER_ADMIN_PASSCODE,
-      adminEmail: settingsAdminEmail.trim() || 'poshanragister@gmail.com',
+      adminEmail: settingsAdminEmail.trim() || 'poshanregister@gmail.com',
       emailAlertsEnabled: settingsEmailAlerts,
       defaultDurationMonths: settingsDefaultDuration,
       referralRewardAmount: config.referralRewardAmount || 0,
@@ -299,7 +299,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const handleReject = (id: string) => {
     const reason = prompt('Enter reason for rejection (नाकारण्याचे कारण प्रविष्ट करा):');
     if (reason !== null) {
-      rejectOrRevokeAccess(id, reason.trim() || 'प्रशासकीय खातरजमा पूर्ण न झाल्याने ही विनंती नाकारण्यात आली आहे.', currentUserEmail || 'umardesh@gmail.com');
+      rejectOrRevokeAccess(id, reason.trim() || 'प्रशासकीय खातरजमा पूर्ण न झाल्याने ही विनंती नाकारण्यात आली आहे.', currentUserEmail || 'poshanregister@gmail.com');
       loadData();
     }
   };
@@ -307,7 +307,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
   const handleRequestMoreInfo = (id: string) => {
     const feedback = prompt('सुधारणेसाठी आवश्यक माहिती / संदेश प्रविष्ट करा (Enter instructions for applicant to correct details):');
     if (feedback !== null && feedback.trim()) {
-      requestMoreInfo(id, feedback.trim(), currentUserEmail || 'umardesh@gmail.com');
+      requestMoreInfo(id, feedback.trim(), currentUserEmail || 'poshanregister@gmail.com');
       loadData();
     }
   };
@@ -431,7 +431,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
               <input
                 type="email"
                 required
-                placeholder="poshanragister@gmail.com"
+                placeholder="poshanregister@gmail.com"
                 value={adminEmailInput}
                 onChange={(e) => setAdminEmailInput(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-mono"
@@ -658,7 +658,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({
       const results = bulkApproveRequests(
         selectedIds,
         bulkDuration,
-        currentUserEmail || 'umardesh@gmail.com'
+        currentUserEmail || 'poshanregister@gmail.com'
       );
       setIsProcessingBulk(false);
       setSelectedIds([]);

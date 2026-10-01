@@ -96,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="Admin & Support Email"
             >
               <Mail className="w-3 h-3 text-amber-300" />
-              <span>poshanragister@gmail.com</span>
+              <span>poshanregister@gmail.com</span>
             </button>
           </div>
         </div>
@@ -648,7 +648,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {language === 'en' ? 'Official Support & Admin Email' : 'अधिकृत सपोर्ट व ॲडमिन ईमेल'}
                 </span>
                 <div className="font-mono text-base sm:text-lg font-bold text-amber-950 select-all break-all bg-white px-3 py-2 rounded-xl border border-amber-200 shadow-2xs">
-                  poshanragister@gmail.com
+                  poshanregister@gmail.com
                 </div>
                 <p className="text-[11px] text-slate-500">
                   {language === 'en'
@@ -660,7 +660,7 @@ export const Header: React.FC<HeaderProps> = ({
               {/* Direct Actions: Mailto & Copy */}
               <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <a
-                  href="mailto:poshanragister@gmail.com?subject=MahaPoshan%20Register%20Query"
+                  href="mailto:poshanregister@gmail.com?subject=MahaPoshan%20Register%20Query"
                   className="px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 text-center cursor-pointer"
                 >
                   <Mail className="w-4 h-4" />
@@ -670,7 +670,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText('poshanragister@gmail.com');
+                    navigator.clipboard.writeText('poshanregister@gmail.com');
                     setCopiedEmail(true);
                     setTimeout(() => setCopiedEmail(false), 2000);
                   }}

@@ -59,7 +59,7 @@ export async function handler(event: any) {
     const { to, subject, html, from } = body;
 
     const apiKey = process.env.RESEND_API_KEY || 're_TxV9nR8Q_GYfaRUa6a4SPWjFo8B9Y44gC';
-    const defaultTo = process.env.SUPER_ADMIN_EMAIL || 'umardesh@gmail.com';
+    const defaultTo = process.env.SUPER_ADMIN_EMAIL || 'poshanregister@gmail.com';
     const toAddress = (to && typeof to === 'string' ? to.trim() : defaultTo);
     const fromAddress = (from && typeof from === 'string' ? from.trim() : (process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'));
 

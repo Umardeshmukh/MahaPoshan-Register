@@ -54,7 +54,7 @@ The landing portal is designed to onboard Maharashtra teachers with a modern, tr
   * `ReportGenerationSection.tsx`: Preview of PDF and Excel generation.
   * `PricingSection.tsx`: Transparent pricing tiers (Term-wise / Annual subscription).
   * `FaqSection.tsx`: 8 detailed FAQs addressing common Maharashtra teacher queries in Marathi.
-  * `LandingFooter.tsx`: 4 mandatory legal document links, support contact (`poshanragister@gmail.com`), and Super Admin gateway link.
+  * `LandingFooter.tsx`: 4 mandatory legal document links, support contact (`poshanregister@gmail.com`), and Super Admin gateway link.
 * **Animations:** GSAP ScrollTrigger timeline animations with `prefers-reduced-motion` accessibility checks.
 
 ### 3.2. Authentication & Access Gatekeeper (`src/components/AccessPendingView.tsx`, `src/lib/subscription-store.ts`)
@@ -68,7 +68,7 @@ Controls user access before granting entry into the register dashboard:
   4. `pending_deletion`: Soft-deleted account with 28-day recovery grace period before cloud purging.
   5. `rejected`: Displays rejection reason and option to correct details.
 * **Testing Bypass Emails:** Instant perpetual access for pre-approved test accounts:
-  `mahaposhan@gmail.com`, `poshanragister@gmail.com`, `umardesh@gmail.com`, `umardesh11@gmail.com`, `abuzar212ai@gmail.com`.
+  `poshanregister@gmail.com`, `mahaposhan@gmail.com`, `umardesh@gmail.com`, `umardesh11@gmail.com`, `abuzar212ai@gmail.com`.
 
 ### 3.3. Super Admin Command Center (`src/components/SuperAdminPanel.tsx`)
 A dedicated administrative console accessible via `#super-admin`:

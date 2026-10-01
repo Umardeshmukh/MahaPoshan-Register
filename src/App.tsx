@@ -109,12 +109,12 @@ export default function App() {
     };
   }, []);
 
-  // Auto-route to Super Admin Panel when logging in as mahaposhan@gmail.com
+  // Auto-route to Super Admin Panel when logging in as poshanregister@gmail.com or mahaposhan@gmail.com
   const hasAutoRoutedAdminRef = useRef(false);
   useEffect(() => {
     if (isSignedIn && user?.primaryEmailAddress?.emailAddress) {
       const email = user.primaryEmailAddress.emailAddress.toLowerCase().trim();
-      if (email === 'mahaposhan@gmail.com' && !hasAutoRoutedAdminRef.current) {
+      if ((email === 'poshanregister@gmail.com' || email === 'mahaposhan@gmail.com') && !hasAutoRoutedAdminRef.current) {
         hasAutoRoutedAdminRef.current = true;
         setIsSuperAdminRoute(true);
         window.location.hash = '#super-admin';
@@ -601,12 +601,12 @@ export default function App() {
               </button>
               <span className="text-slate-300">•</span>
               <a
-                href="mailto:poshanragister@gmail.com"
+                href="mailto:poshanregister@gmail.com"
                 className="text-amber-800 hover:text-amber-950 font-bold hover:underline inline-flex items-center gap-1"
                 title="अधिकृत संपर्क ईमेल"
               >
                 <Mail className="w-3 h-3 text-amber-700 shrink-0" />
-                <span className="break-all">poshanragister@gmail.com</span>
+                <span className="break-all">poshanregister@gmail.com</span>
               </a>
             </div>
           </div>

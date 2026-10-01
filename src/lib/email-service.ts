@@ -283,7 +283,7 @@ export async function sendSchoolRegistrationAlert(
               किंवा थेट लिंकवर जा: <a href="${appUrl}" style="color: #d97706; font-weight: 600;">${appUrl}</a>
             </p>
             <p style="margin-top: 4px; font-size: 11px; color: #94a3b8;">
-              (ॲडमिन ईमेल: umardesh@gmail.com • पासकोड: Admin@1234)
+              (ॲडमिन ईमेल: poshanregister@gmail.com • पासकोड: Admin@1234)
             </p>
           </div>
         </div>
@@ -297,7 +297,7 @@ export async function sendSchoolRegistrationAlert(
   `.trim();
 
   return sendEmail({
-    to: 'umardesh@gmail.com',
+    to: 'poshanregister@gmail.com',
     subject: `[MahaPoshan] ${title}: ${request.schoolName} (${request.udiseNumber})`,
     html,
   });
@@ -373,7 +373,7 @@ export async function sendApprovalConfirmationEmail(params: {
 /**
  * Dispatches a test email to verify the Resend connection.
  */
-export async function sendTestEmail(toEmail: string = 'umardesh@gmail.com'): Promise<SendEmailResponse> {
+export async function sendTestEmail(toEmail: string = 'poshanregister@gmail.com'): Promise<SendEmailResponse> {
   const html = `
     <div style="font-family: sans-serif; padding: 20px; color: #1e293b;">
       <h2 style="color: #92400e;">⚡ MahaPoshan Register • Resend Email चाचणी</h2>

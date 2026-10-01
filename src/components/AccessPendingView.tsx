@@ -324,7 +324,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
       ...initialRequest,
       notes: 'सदस्यत्व नूतनीकरण (Renewal Request)',
     });
-    alert('सदस्यत्व नूतनीकरणाची विनंती Super Admin (umardesh@gmail.com) कडे पाठवण्यात आली आहे. मंजुरी मिळताच आपले खाते सक्रिय होईल.');
+    alert('सदस्यत्व नूतनीकरणाची विनंती Super Admin (poshanregister@gmail.com) कडे पाठवण्यात आली आहे. मंजुरी मिळताच आपले खाते सक्रिय होईल.');
     onRefresh();
   };
 
@@ -395,7 +395,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
               <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 max-w-md mx-auto">
                 <p className="font-semibold">खाते पूर्ववत (Restore) करावयाचे असल्यास:</p>
                 <p className="text-[11px] text-amber-800 mt-0.5">
-                  कृपया मुदत संपण्यापूर्वी त्वरित Super Admin शी संपर्क साधा: <strong>poshanragister@gmail.com</strong>
+                  कृपया मुदत संपण्यापूर्वी त्वरित Super Admin शी संपर्क साधा: <strong>poshanregister@gmail.com</strong>
                 </p>
               </div>
 
@@ -723,7 +723,7 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
               </h2>
 
               <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-lg mx-auto leading-relaxed">
-                आपल्या शाळेची माहिती सुपर ॲडमिन (<strong className="text-slate-800 font-semibold">umardesh@gmail.com</strong>) कडे मंजुरीसाठी पाठवण्यात आली आहे. खातरजमा करून मंजुरी दिल्यावर आपले खाते त्वरित सुरू होईल.
+                आपल्या शाळेची माहिती सुपर ॲडमिन (<strong className="text-slate-800 font-semibold">poshanregister@gmail.com</strong>) कडे मंजुरीसाठी पाठवण्यात आली आहे. खातरजमा करून मंजुरी दिल्यावर आपले खाते त्वरित सुरू होईल.
               </p>
 
               {/* Submitted Details Box */}
@@ -798,10 +798,10 @@ export const AccessPendingView: React.FC<AccessPendingViewProps> = ({
                   <span>सुपर ॲडमिन संपर्क (Admin Alert Sent To):</span>
                 </p>
                 <a
-                  href="mailto:umardesh@gmail.com"
+                  href="mailto:poshanregister@gmail.com"
                   className="font-mono text-xs font-bold text-amber-950 underline hover:text-amber-800 mt-1 inline-block"
                 >
-                  umardesh@gmail.com
+                  poshanregister@gmail.com
                 </a>
                 <p className="text-[11px] text-slate-500 mt-1">
                   प्रणाली दर १० सेकंदांनी स्वयंचलितपणे मंजुरी तपासत आहे. मंजुरी मिळताच ॲप आपोआप सुरू होईल.
