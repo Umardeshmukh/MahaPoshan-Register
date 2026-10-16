@@ -1,6 +1,5 @@
 import React from 'react';
 import { ItemConsumption } from '../../../types';
-import { isSpice } from '../../../lib/constants';
 
 export interface DailyIngredientsTableProps {
   items: ItemConsumption[];
@@ -12,7 +11,6 @@ export const DailyIngredientsTable: React.FC<DailyIngredientsTableProps> = ({ it
       {/* Mobile Card List (Phones: sm:hidden) */}
       <div className="block sm:hidden space-y-2">
         {items.map((item) => {
-          const isSpiceItem = isSpice(item.ingredientId);
           const unit = item.ingredientId === 'purak_aahar' ? 'नग' : item.ingredientId === 'oil' ? 'ml' : 'g';
 
           return (
@@ -32,12 +30,7 @@ export const DailyIngredientsTable: React.FC<DailyIngredientsTableProps> = ({ it
                 <span className="font-bold text-amber-950 block font-mono text-sm">
                   {item.ingredientId === 'purak_aahar'
                     ? `${item.totalGrams} नग`
-                    : isSpiceItem
-                    ? `${item.totalGrams.toFixed(1)} g`
                     : `${item.totalKg.toFixed(3)} kg`}
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  ({item.totalGrams.toLocaleString('en-IN')} {item.ingredientId === 'oil' ? 'ml' : 'g'})
                 </span>
               </div>
             </div>
@@ -53,15 +46,13 @@ export const DailyIngredientsTable: React.FC<DailyIngredientsTableProps> = ({ it
               <th className="py-3 px-4">साहित्य नाव</th>
               <th className="py-3 px-4">प्रवर्ग</th>
               <th className="py-3 px-4 text-right">प्रति विद्यार्थी प्रमाण</th>
-              <th className="py-3 px-4 text-right">एकूण प्रमाण</th>
               <th className="py-3 px-4 text-right font-bold text-amber-950 bg-amber-50/70">
-                आवश्यक प्रमाण (kg / g / नग)
+                आवश्यक एकूण प्रमाण (Total in KG / नग)
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 font-mono">
             {items.map((item) => {
-              const isSpiceItem = isSpice(item.ingredientId);
               const unit = item.ingredientId === 'purak_aahar' ? 'नग' : item.ingredientId === 'oil' ? 'ml' : 'g';
 
               return (
@@ -78,14 +69,9 @@ export const DailyIngredientsTable: React.FC<DailyIngredientsTableProps> = ({ it
                   <td className="py-2.5 px-4 text-right">
                     {item.gramsPerStudent} {unit}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-semibold">
-                    {item.totalGrams.toLocaleString('en-IN')} {item.ingredientId === 'oil' ? 'ml' : 'g'}
-                  </td>
                   <td className="py-2.5 px-4 text-right font-bold text-amber-950 bg-amber-50/50">
                     {item.ingredientId === 'purak_aahar'
                       ? `${item.totalGrams} नग`
-                      : isSpiceItem
-                      ? `${item.totalGrams.toFixed(1)} g`
                       : `${item.totalKg.toFixed(3)} kg`}
                   </td>
                 </tr>

@@ -4,7 +4,6 @@ import { getMonthNames, toMarathiDigits, formatINR } from '../lib/mdm-calculator
 import { exportMonthlyRegisterToExcel } from '../lib/excel-export';
 import {
   OFFICIAL_REGISTER_COLUMNS,
-  isSpice,
   getColumnUnitLabel,
   getStockInDisplayUnit,
 } from '../lib/constants';
@@ -57,20 +56,14 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
       OFFICIAL_REGISTER_COLUMNS.forEach((col) => {
         const itemData = entry.items[col.id];
         if (itemData) {
-          if (isSpice(col.id)) {
-            // Spices calculated in GRAMS
-            const g = itemData.grams || 0;
-            if (g > 0) {
-              colConsumedTotals[col.id] = (colConsumedTotals[col.id] || 0) + g;
-            }
-          } else if (col.id === 'purak_aahar') {
+          if (col.id === 'purak_aahar') {
             // Purak Aahar in NAG
             const nag = itemData.grams || 0;
             if (nag > 0) {
               colConsumedTotals[col.id] = (colConsumedTotals[col.id] || 0) + nag;
             }
           } else {
-            // Pulses, legumes, grains, vegetables in KG
+            // All ingredients (grains, pulses, spices, oil, vegetables) in KG
             const kg = itemData.kg || 0;
             if (kg > 0) {
               colConsumedTotals[col.id] = (colConsumedTotals[col.id] || 0) + kg;
@@ -193,7 +186,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
             </div>
             <div className="text-left sm:text-right font-bold text-xs text-slate-800">
               <span className="bg-amber-50 border border-slate-300 px-2 py-0.5 rounded text-[10px] sm:text-xs">
-                डाळी/कडधान्ये: <strong>कि.ग्रॅ.</strong> | मसाले/मीठ: <strong>ग्रॅम</strong> | पूरक आहार: <strong>नग</strong>
+                साहित्य वजन: <strong>कि.ग्रॅ. (KG)</strong> | पूरक आहार: <strong>नग</strong>
               </span>
             </div>
           </div>
@@ -270,11 +263,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     if (val <= 0) return <td key={col.id} className="border border-black p-1">-</td>;
                     return (
                       <td key={col.id} className="border border-black p-1">
-                        {isSpice(col.id)
-                          ? (val >= 100 ? val.toFixed(0) : val.toFixed(1))
-                          : col.id === 'purak_aahar'
-                          ? val
-                          : val.toFixed(3)}
+                        {col.id === 'purak_aahar' ? val : val.toFixed(3)}
                       </td>
                     );
                   })}
@@ -295,11 +284,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     if (val <= 0) return <td key={col.id} className="border border-black p-1">-</td>;
                     return (
                       <td key={col.id} className="border border-black p-1">
-                        {isSpice(col.id)
-                          ? (val >= 100 ? val.toFixed(0) : val.toFixed(1))
-                          : col.id === 'purak_aahar'
-                          ? val
-                          : val.toFixed(3)}
+                        {col.id === 'purak_aahar' ? val : val.toFixed(3)}
                       </td>
                     );
                   })}
@@ -321,11 +306,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     if (tot <= 0) return <td key={col.id} className="border border-black p-1">-</td>;
                     return (
                       <td key={col.id} className="border border-black p-1 font-black">
-                        {isSpice(col.id)
-                          ? (tot >= 100 ? tot.toFixed(0) : tot.toFixed(1))
-                          : col.id === 'purak_aahar'
-                          ? tot
-                          : tot.toFixed(3)}
+                        {col.id === 'purak_aahar' ? tot : tot.toFixed(3)}
                       </td>
                     );
                   })}
@@ -407,21 +388,13 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                       <td className="border border-black p-1 font-bold">{entry.studentCount}</td>
                       <td className="border border-black p-1 font-bold">{entry.studentCount}</td>
 
-                      {/* Ingredient quantities: Pulses in KG, Spices in Grams, Purak Aahar in Nag */}
+                      {/* Ingredient quantities: Pulses, spices, oil in KG, Purak Aahar in Nag */}
                       {OFFICIAL_REGISTER_COLUMNS.map((col) => {
                         const itemData = entry.items[col.id];
                         if (!itemData) {
                           return (
                             <td key={col.id} className="border border-black p-1 text-slate-300">
                               -
-                            </td>
-                          );
-                        }
-                        if (isSpice(col.id)) {
-                          const g = itemData.grams || 0;
-                          return (
-                            <td key={col.id} className="border border-black p-1">
-                              {g > 0 ? (g >= 10 ? g.toFixed(1) : g.toFixed(2)) : '-'}
                             </td>
                           );
                         }
@@ -473,13 +446,6 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                         </td>
                       );
                     }
-                    if (isSpice(col.id)) {
-                      return (
-                        <td key={col.id} className="border border-black p-1 font-black text-amber-950">
-                          {val >= 100 ? val.toFixed(0) : val.toFixed(1)}
-                        </td>
-                      );
-                    }
                     if (col.id === 'purak_aahar') {
                       return (
                         <td key={col.id} className="border border-black p-1 font-black text-indigo-950">
@@ -513,9 +479,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     const recVal = getStockInDisplayUnit(rawRec, col.id);
                     const consumed = colConsumedTotals[col.id] || 0;
                     const closing = openVal + recVal - consumed;
-                    const displayVal = isSpice(col.id)
-                      ? (closing >= 100 ? closing.toFixed(0) : closing.toFixed(1))
-                      : col.id === 'purak_aahar'
+                    const displayVal = col.id === 'purak_aahar'
                       ? closing.toFixed(0)
                       : closing.toFixed(3);
                     return (

@@ -14,7 +14,6 @@ import {
 } from '../lib/mdm-calculator';
 import { exportMonthlyRegisterToExcel } from '../lib/excel-export';
 import {
-  isSpice,
   getColumnUnitLabel,
   getStockInDisplayUnit,
 } from '../lib/constants';
@@ -551,14 +550,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                 closingBalanceKg: 0,
               };
 
-              const isAnIngredientSpice = isSpice(ing.id);
-              const displayUnit = isAnIngredientSpice
-                ? 'g'
-                : ing.unit === 'nag'
-                ? 'नग'
-                : ing.unit === 'ml'
-                ? 'L'
-                : 'kg';
+              const displayUnit = ing.unit === 'nag' ? 'नग' : 'kg';
 
               const rawOpening = stockEditMode
                 ? localStock[ing.id]?.openingStockKg ?? itemSummary.openingStockKg
@@ -570,13 +562,13 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
 
               const currentOpening = getStockInDisplayUnit(rawOpening, ing.id);
               const currentReceived = getStockInDisplayUnit(rawReceived, ing.id);
-              const currentAvailable = Number((currentOpening + currentReceived).toFixed(isAnIngredientSpice ? 1 : 3));
+              const currentAvailable = Number((currentOpening + currentReceived).toFixed(ing.unit === 'nag' ? 0 : 3));
 
-              const consumedVal = isAnIngredientSpice || ing.unit === 'nag'
-                ? Number((itemSummary.totalKg * 1000).toFixed(1))
+              const consumedVal = ing.unit === 'nag'
+                ? Number(itemSummary.totalKg.toFixed(0))
                 : Number(itemSummary.totalKg.toFixed(3));
 
-              const currentClosing = Number((currentAvailable - consumedVal).toFixed(isAnIngredientSpice ? 1 : 3));
+              const currentClosing = Number((currentAvailable - consumedVal).toFixed(ing.unit === 'nag' ? 0 : 3));
               const isNegative = currentClosing < 0;
 
               return (
@@ -599,7 +591,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                       {stockEditMode ? (
                         <input
                           type="number"
-                          step={isAnIngredientSpice ? '1' : '0.1'}
+                          step={ing.unit === 'nag' ? '1' : '0.001'}
                           min="0"
                           value={currentOpening || ''}
                           onChange={(e) =>
@@ -609,7 +601,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                         />
                       ) : (
                         <span className="font-bold font-mono text-slate-800 text-sm mt-0.5 block">
-                          {currentOpening.toFixed(isAnIngredientSpice ? 1 : 3)} {displayUnit}
+                          {currentOpening.toFixed(ing.unit === 'nag' ? 0 : 3)} {displayUnit}
                         </span>
                       )}
                     </div>
@@ -619,7 +611,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                       {stockEditMode ? (
                         <input
                           type="number"
-                          step={isAnIngredientSpice ? '1' : '0.1'}
+                          step={ing.unit === 'nag' ? '1' : '0.001'}
                           min="0"
                           value={currentReceived || ''}
                           onChange={(e) =>
@@ -629,7 +621,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                         />
                       ) : (
                         <span className="font-bold font-mono text-slate-800 text-sm mt-0.5 block">
-                          {currentReceived.toFixed(isAnIngredientSpice ? 1 : 3)} {displayUnit}
+                          {currentReceived.toFixed(ing.unit === 'nag' ? 0 : 3)} {displayUnit}
                         </span>
                       )}
                     </div>
@@ -637,14 +629,14 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                     <div className="bg-white p-2.5 rounded-xl border border-slate-200">
                       <span className="text-slate-500 block text-[11px]">मासिक वापर (Consumed)</span>
                       <span className="font-bold font-mono text-amber-900 text-sm mt-0.5 block">
-                        {consumedVal.toFixed(isAnIngredientSpice ? 1 : 3)} {displayUnit}
+                        {consumedVal.toFixed(ing.unit === 'nag' ? 0 : 3)} {displayUnit}
                       </span>
                     </div>
 
                     <div className={`p-2.5 rounded-xl border ${isNegative ? 'bg-rose-50 border-rose-300' : 'bg-amber-50 border-amber-200'}`}>
                       <span className="text-slate-500 block text-[11px]">अखेर शिल्लक (Closing)</span>
                       <span className={`font-black font-mono text-sm mt-0.5 block ${isNegative ? 'text-rose-600' : 'text-slate-900'}`}>
-                        {currentClosing.toFixed(isAnIngredientSpice ? 1 : 3)} {displayUnit}
+                        {currentClosing.toFixed(ing.unit === 'nag' ? 0 : 3)} {displayUnit}
                       </span>
                     </div>
                   </div>
@@ -678,8 +670,6 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                     closingBalanceKg: 0,
                   };
 
-                  const isAnIngredientSpice = isSpice(ing.id);
-
                   const rawOpening = stockEditMode
                     ? localStock[ing.id]?.openingStockKg ?? itemSummary.openingStockKg
                     : itemSummary.openingStockKg;
@@ -690,13 +680,13 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
 
                   const currentOpening = getStockInDisplayUnit(rawOpening, ing.id);
                   const currentReceived = getStockInDisplayUnit(rawReceived, ing.id);
-                  const currentAvailable = Number((currentOpening + currentReceived).toFixed(isAnIngredientSpice ? 1 : 3));
+                  const currentAvailable = Number((currentOpening + currentReceived).toFixed(ing.unit === 'nag' ? 0 : 3));
 
-                  const consumedVal = isAnIngredientSpice || ing.unit === 'nag'
-                    ? Number((itemSummary.totalKg * 1000).toFixed(1))
+                  const consumedVal = ing.unit === 'nag'
+                    ? Number(itemSummary.totalKg.toFixed(0))
                     : Number(itemSummary.totalKg.toFixed(3));
 
-                  const currentClosing = Number((currentAvailable - consumedVal).toFixed(isAnIngredientSpice ? 1 : 3));
+                  const currentClosing = Number((currentAvailable - consumedVal).toFixed(ing.unit === 'nag' ? 0 : 3));
                   const isNegative = currentClosing < 0;
 
                   return (
@@ -706,20 +696,14 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                       </td>
                       <td className="py-2.5 px-4 text-center font-mono">
                         <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-bold">
-                          {isAnIngredientSpice
-                            ? 'ग्रॅम (g)'
-                            : ing.unit === 'nag'
-                            ? 'नग'
-                            : ing.unit === 'ml'
-                            ? 'लिटर'
-                            : 'किलो (kg)'}
+                          {ing.unit === 'nag' ? 'नग' : 'किलो (kg)'}
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-right bg-blue-50/20">
                         {stockEditMode ? (
                           <input
                             type="number"
-                            step={isAnIngredientSpice ? '1' : '0.1'}
+                            step={ing.unit === 'nag' ? '1' : '0.001'}
                             min="0"
                             value={currentOpening || ''}
                             onChange={(e) =>
@@ -728,14 +712,14 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                             className="w-24 px-2 py-1 text-right font-mono bg-white border border-blue-300 rounded text-xs focus:ring-1 focus:ring-blue-500"
                           />
                         ) : (
-                          <span>{currentOpening.toFixed(isAnIngredientSpice ? 1 : 3)}</span>
+                          <span>{currentOpening.toFixed(ing.unit === 'nag' ? 0 : 3)}</span>
                         )}
                       </td>
                       <td className="py-2.5 px-4 text-right bg-emerald-50/20">
                         {stockEditMode ? (
                           <input
                             type="number"
-                            step={isAnIngredientSpice ? '1' : '0.1'}
+                            step={ing.unit === 'nag' ? '1' : '0.001'}
                             min="0"
                             value={currentReceived || ''}
                             onChange={(e) =>
@@ -744,17 +728,17 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                             className="w-24 px-2 py-1 text-right font-mono bg-white border border-emerald-300 rounded text-xs focus:ring-1 focus:ring-emerald-500"
                           />
                         ) : (
-                          <span>{currentReceived.toFixed(isAnIngredientSpice ? 1 : 3)}</span>
+                          <span>{currentReceived.toFixed(ing.unit === 'nag' ? 0 : 3)}</span>
                         )}
                       </td>
                       <td className="py-2.5 px-4 text-right font-bold text-slate-800">
-                        {currentAvailable.toFixed(isAnIngredientSpice ? 1 : 3)}
+                        {currentAvailable.toFixed(ing.unit === 'nag' ? 0 : 3)}
                       </td>
                       <td className="py-2.5 px-4 text-right font-bold text-amber-900">
-                        {consumedVal.toFixed(isAnIngredientSpice ? 1 : 3)}
+                        {consumedVal.toFixed(ing.unit === 'nag' ? 0 : 3)}
                       </td>
                       <td className={`py-2.5 px-4 text-right font-black ${isNegative ? 'text-rose-600 bg-rose-50' : 'text-slate-900 bg-amber-50/50'}`}>
-                        {currentClosing.toFixed(isAnIngredientSpice ? 1 : 3)}
+                        {currentClosing.toFixed(ing.unit === 'nag' ? 0 : 3)}
                       </td>
                     </tr>
                   );
@@ -792,12 +776,8 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                   <th className="py-3 px-3 border-r border-slate-200 text-right w-16 bg-amber-50/50">लाभार्थी</th>
                   <th className="py-3 px-3 border-r border-slate-200 min-w-[140px]">मेन्यू (आहार)</th>
                   {ingredients.map((ing) => {
-                    const unitLabel = isSpice(ing.id)
-                      ? 'ग्रॅम'
-                      : ing.unit === 'nag'
+                    const unitLabel = ing.unit === 'nag'
                       ? 'नग'
-                      : ing.unit === 'ml'
-                      ? 'लिटर'
                       : unitMode === 'gm'
                       ? 'ग्रॅम'
                       : 'कि.ग्रॅ.';
@@ -871,9 +851,7 @@ export const MonthlyRegisterView: React.FC<MonthlyRegisterViewProps> = ({
                             <td key={ing.id} className="py-2.5 px-2 text-right border-r border-slate-200 text-slate-300">-</td>
                           );
                         }
-                        const val = isSpice(ing.id)
-                          ? `${itemData.grams.toFixed(1)} g`
-                          : ing.unit === 'nag'
+                        const val = ing.unit === 'nag'
                           ? `${itemData.grams} नग`
                           : unitMode === 'gm'
                           ? `${itemData.grams.toLocaleString('en-IN')} g`

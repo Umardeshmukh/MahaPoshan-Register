@@ -4,6 +4,7 @@ import {
   DishRecipe,
   DailyRegisterEntry,
   LanguageMode,
+  SchoolProfile,
 } from '../types';
 import {
   calculateDayConsumption,
@@ -35,6 +36,7 @@ import {
 } from 'lucide-react';
 
 interface DailyEntryViewProps {
+  profile?: SchoolProfile;
   ingredients: Ingredient[];
   recipes: DishRecipe[];
   dailyEntries: Record<string, DailyRegisterEntry>;
@@ -46,6 +48,7 @@ interface DailyEntryViewProps {
 }
 
 export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
+  profile,
   ingredients,
   recipes,
   dailyEntries,
@@ -55,6 +58,11 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
   onDeleteEntry,
   onNavigateToRegister,
 }) => {
+  // Default total students from settings/profile
+  const defaultStudents = useMemo(() => {
+    return profile?.totalStudents && profile.totalStudents > 0 ? profile.totalStudents : 70;
+  }, [profile?.totalStudents]);
+
   // Today's date string YYYY-MM-DD
   const todayStr = useMemo(() => {
     if (initialDate) return initialDate;
@@ -67,7 +75,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
 
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedDishId, setSelectedDishId] = useState<string>('');
-  const [studentCount, setStudentCount] = useState<number>(70);
+  const [studentCount, setStudentCount] = useState<number>(defaultStudents);
   const [isHoliday, setIsHoliday] = useState<boolean>(false);
   const [holidayReason, setHolidayReason] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
@@ -99,12 +107,12 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
         setStudentCount(0);
       } else {
         setHolidayReason('');
-        setStudentCount(70);
+        setStudentCount(defaultStudents);
       }
       setRemarks('');
     }
     setSaveSuccessMsg(null);
-  }, [selectedDate, dailyEntries, recipes, dayInfo.dayOfWeek]);
+  }, [selectedDate, dailyEntries, recipes, dayInfo.dayOfWeek, defaultStudents]);
 
   // Active recipe
   const activeRecipe = useMemo(() => {

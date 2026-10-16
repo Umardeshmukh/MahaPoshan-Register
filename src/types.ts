@@ -28,6 +28,7 @@ export interface SchoolProfile {
   headmasterName: string;
   inchargeTeacher: string;
   cookName: string;
+  totalStudents?: number;
   role?: UserRole;
   verificationStatus?: VerificationStatus;
   accessStatus?: AccessStatus;

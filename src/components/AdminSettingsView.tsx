@@ -1099,6 +1099,32 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    एकूण विद्यार्थी पटसंख्या (Total Students):
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="999"
+                    value={generalForm.school.totalStudents || ''}
+                    onChange={(e) =>
+                      setGeneralForm({
+                        ...generalForm,
+                        school: {
+                          ...generalForm.school,
+                          totalStudents: parseInt(e.target.value, 10) || 0,
+                        },
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono font-bold"
+                    placeholder="उदा. 70"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    (दैनिक नोंदवहीत हीच पटसंख्या आपोआप येईल, जोपर्यंत तुम्ही सेटिंगमधून बदलत नाही)
+                  </p>
+                </div>
               </div>
             </div>
 

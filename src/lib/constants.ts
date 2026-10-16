@@ -12,6 +12,7 @@ export const DEFAULT_SCHOOL_PROFILE: SchoolProfile = {
   headmasterName: '',
   inchargeTeacher: '',
   cookName: '',
+  totalStudents: 70,
 };
 
 export const DEFAULT_INGREDIENTS: Ingredient[] = [
@@ -281,18 +282,15 @@ export function isSpice(id: string): boolean {
 }
 
 export function getColumnUnitLabel(id: string): string {
-  if (isSpice(id)) return 'ग्रॅम';
   if (id === 'purak_aahar') return 'नग';
-  if (id === 'oil') return 'लिटर';
-  return 'कि.ग्रॅ.'; // Pulses, rice, vegetables, etc.
+  return 'कि.ग्रॅ.'; // All grains, pulses, spices, oil, vegetables in KG
 }
 
 export function getStockInDisplayUnit(rawVal: number, ingredientId: string): number {
   if (rawVal <= 0) return 0;
-  if (isSpice(ingredientId)) {
-    // If raw stock was recorded in kg (<= 10 kg), convert to grams (e.g., 2 kg -> 2000 g)
-    // If entered in grams (> 10 g, e.g., 200g, 500g), keep as grams
-    return rawVal <= 10 ? rawVal * 1000 : rawVal;
+  if (isSpice(ingredientId) && rawVal > 20) {
+    // If raw stock was previously entered in grams (> 20 g, e.g. 200g, 500g), convert to kg
+    return rawVal / 1000;
   }
   return rawVal;
 }

@@ -504,6 +504,7 @@ export default function App() {
       <main className="flex-1 pb-24 md:pb-10">
         {activeTab === 'daily' && (
           <DailyEntryView
+            profile={appData.profile}
             ingredients={appData.ingredients}
             recipes={appData.recipes}
             dailyEntries={appData.dailyEntries}
