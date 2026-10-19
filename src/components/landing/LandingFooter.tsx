@@ -121,10 +121,11 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenLegal }) => 
               </li>
               <li className="pt-1.5">
                 <a
-                  href="#super-admin"
+                  href="/admin"
                   onClick={(e) => {
                     e.preventDefault();
-                    window.location.hash = '#super-admin';
+                    window.history.pushState({ superAdmin: true }, '', '/admin');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-slate-700/80 font-bold text-[11px] transition-colors cursor-pointer"
                 >

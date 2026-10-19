@@ -42,9 +42,107 @@ import { ReferralCard } from './components/ReferralCard';
 import { LegalDocType } from './types';
 import { Mail } from 'lucide-react';
 
+type TabType = 'daily' | 'register' | 'admin' | 'print';
+
+interface RouteState {
+  isSuperAdmin: boolean;
+  isLanding: boolean;
+  tab: TabType;
+}
+
+function parseCurrentLocation(): RouteState {
+  if (typeof window === 'undefined') {
+    return { isSuperAdmin: false, isLanding: false, tab: 'daily' };
+  }
+
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+
+  // Super Admin route: /admin, /super-admin, #super-admin
+  if (
+    hash === '#super-admin' ||
+    path === '/admin' ||
+    path.startsWith('/admin/') ||
+    path === '/super-admin' ||
+    path.startsWith('/super-admin/')
+  ) {
+    return { isSuperAdmin: true, isLanding: false, tab: 'daily' };
+  }
+
+  // Landing page route: /landing, #landing, #home, #overview
+  if (
+    hash === '#landing' ||
+    hash === '#home' ||
+    hash === '#overview' ||
+    path === '/landing' ||
+    path.startsWith('/landing/')
+  ) {
+    return { isSuperAdmin: false, isLanding: true, tab: 'daily' };
+  }
+
+  // Settings tab: /setting, /settings, #setting, #settings
+  if (
+    path === '/setting' ||
+    path === '/settings' ||
+    path.startsWith('/setting/') ||
+    path.startsWith('/settings/') ||
+    hash === '#setting' ||
+    hash === '#settings'
+  ) {
+    return { isSuperAdmin: false, isLanding: false, tab: 'admin' };
+  }
+
+  // Reports / Print tab: /report, /reports, /print, #report, #reports, #print
+  if (
+    path === '/report' ||
+    path === '/reports' ||
+    path === '/print' ||
+    path.startsWith('/report/') ||
+    path.startsWith('/reports/') ||
+    path.startsWith('/print/') ||
+    hash === '#report' ||
+    hash === '#reports' ||
+    hash === '#print'
+  ) {
+    return { isSuperAdmin: false, isLanding: false, tab: 'print' };
+  }
+
+  // Monthly Register tab: /register, #register
+  if (
+    path === '/register' ||
+    path.startsWith('/register/') ||
+    hash === '#register'
+  ) {
+    return { isSuperAdmin: false, isLanding: false, tab: 'register' };
+  }
+
+  // Default: /daily or /
+  return { isSuperAdmin: false, isLanding: false, tab: 'daily' };
+}
+
+function getPathForTab(tab: TabType): string {
+  switch (tab) {
+    case 'admin':
+      return '/setting';
+    case 'print':
+      return '/report';
+    case 'register':
+      return '/register';
+    case 'daily':
+    default:
+      return '/daily';
+  }
+}
+
 export default function App() {
   const [appData, setAppData] = useState<AppData>(() => getInitialData());
-  const [activeTab, setActiveTab] = useState<'daily' | 'register' | 'admin' | 'print'>('daily');
+  
+  // Initialize route states from current URL
+  const initialRoute = parseCurrentLocation();
+  const [activeTab, setActiveTab] = useState<TabType>(initialRoute.tab);
+  const [isSuperAdminRoute, setIsSuperAdminRoute] = useState<boolean>(initialRoute.isSuperAdmin);
+  const [isLandingRoute, setIsLandingRoute] = useState<boolean>(initialRoute.isLanding);
+
   const [printMonthKey, setPrintMonthKey] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -71,34 +169,15 @@ export default function App() {
     return subscribeSyncStatus(setSyncStatus);
   }, []);
 
-  // Track secret route for Super Admin: #super-admin or /super-admin
-  const [isSuperAdminRoute, setIsSuperAdminRoute] = useState<boolean>(() => {
-    return (
-      window.location.hash === '#super-admin' ||
-      window.location.pathname.includes('/super-admin')
-    );
-  });
-
-  // Track landing page route: #landing or #overview or /landing
-  const [isLandingRoute, setIsLandingRoute] = useState<boolean>(() => {
-    return (
-      window.location.hash === '#landing' ||
-      window.location.hash === '#home' ||
-      window.location.pathname.includes('/landing')
-    );
-  });
-
+  // Sync state when browser back/forward or hash changes
   useEffect(() => {
     const handleLocationChange = () => {
-      setIsSuperAdminRoute(
-        window.location.hash === '#super-admin' ||
-        window.location.pathname.includes('/super-admin')
-      );
-      setIsLandingRoute(
-        window.location.hash === '#landing' ||
-        window.location.hash === '#home' ||
-        window.location.pathname.includes('/landing')
-      );
+      const route = parseCurrentLocation();
+      setIsSuperAdminRoute(route.isSuperAdmin);
+      setIsLandingRoute(route.isLanding);
+      if (!route.isSuperAdmin && !route.isLanding) {
+        setActiveTab(route.tab);
+      }
     };
 
     window.addEventListener('hashchange', handleLocationChange);
@@ -117,7 +196,9 @@ export default function App() {
       if ((email === 'poshanregister@gmail.com' || email === 'mahaposhan@gmail.com') && !hasAutoRoutedAdminRef.current) {
         hasAutoRoutedAdminRef.current = true;
         setIsSuperAdminRoute(true);
-        window.location.hash = '#super-admin';
+        if (window.location.pathname !== '/admin') {
+          window.history.pushState({ superAdmin: true }, '', '/admin');
+        }
       }
     }
   }, [isSignedIn, user?.primaryEmailAddress?.emailAddress]);
@@ -367,16 +448,35 @@ export default function App() {
     }));
   };
 
+  const handleNavigateTab = (nextTab: TabType) => {
+    setActiveTab(nextTab);
+    setIsSuperAdminRoute(false);
+    setIsLandingRoute(false);
+
+    const targetPath = getPathForTab(nextTab);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ tab: nextTab }, '', targetPath);
+    }
+  };
+
+  const handleOpenSuperAdmin = () => {
+    setIsSuperAdminRoute(true);
+    setIsLandingRoute(false);
+    if (window.location.pathname !== '/admin') {
+      window.history.pushState({ superAdmin: true }, '', '/admin');
+    }
+  };
+
   const handleNavigateToDaily = (dateStr?: string) => {
     if (dateStr) {
       setTargetDailyDate(dateStr);
     }
-    setActiveTab('daily');
+    handleNavigateTab('daily');
   };
 
   const handleOpenPrintView = (monthKey: string) => {
     setPrintMonthKey(monthKey);
-    setActiveTab('print');
+    handleNavigateTab('print');
   };
 
   const accessStatus = getUserAccessStatus(
@@ -423,17 +523,16 @@ export default function App() {
     }
   }, [isSignedIn, user?.id, accessRefreshTrigger, accessStatus.status]);
 
-  // 1. Super Admin Secret Route Gate: /super-admin or #super-admin
+  // 1. Super Admin Route Gate: /admin, /super-admin or #super-admin
   if (isSuperAdminRoute) {
     return (
       <SuperAdminPanel
         currentUserEmail={user?.primaryEmailAddress?.emailAddress}
         onExit={() => {
           window.location.hash = '';
-          if (window.location.pathname.includes('/super-admin')) {
-            window.history.pushState({}, '', '/');
-          }
           setIsSuperAdminRoute(false);
+          window.history.pushState({ tab: 'daily' }, '', '/daily');
+          setActiveTab('daily');
         }}
       />
     );
@@ -486,16 +585,13 @@ export default function App() {
         <Header
           profile={appData.profile}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={handleNavigateTab}
           language={appData.language}
           setLanguage={handleSetLanguage}
           daysRemaining={accessStatus.daysRemaining}
           isSuperAdmin={accessStatus.isSuperAdmin}
           syncStatus={syncStatus}
-          onOpenSuperAdmin={() => {
-            window.location.hash = '#super-admin';
-            setIsSuperAdminRoute(true);
-          }}
+          onOpenSuperAdmin={handleOpenSuperAdmin}
           onOpenReferral={() => setReferralModalOpen(true)}
         />
       )}
@@ -512,7 +608,7 @@ export default function App() {
             initialDate={targetDailyDate}
             onSaveEntry={handleSaveDailyEntry}
             onDeleteEntry={handleDeleteDailyEntry}
-            onNavigateToRegister={() => setActiveTab('register')}
+            onNavigateToRegister={() => handleNavigateTab('register')}
           />
         )}
 
@@ -538,10 +634,7 @@ export default function App() {
             onRecalculateEntries={handleRecalculateEntries}
             onClearRegisterData={handleClearRegisterData}
             onResetAllData={handleResetAllData}
-            onOpenSuperAdmin={() => {
-              window.location.hash = '#super-admin';
-              setIsSuperAdminRoute(true);
-            }}
+            onOpenSuperAdmin={handleOpenSuperAdmin}
           />
         )}
 
@@ -549,7 +642,7 @@ export default function App() {
           <OfficialPrintView
             monthKey={printMonthKey}
             appData={appData}
-            onClose={() => setActiveTab('register')}
+            onClose={() => handleNavigateTab('register')}
           />
         )}
       </main>
