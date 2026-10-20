@@ -16,6 +16,7 @@ import { FaqSection } from './FaqSection';
 import { FinalCtaSection } from './FinalCtaSection';
 import { LandingFooter } from './LandingFooter';
 import { LegalModal } from '../LegalModal';
+import { HelpBotModal } from '../HelpBotModal';
 import { LegalDocType } from '../../types';
 
 // Register GSAP ScrollTrigger plugin safely
@@ -135,6 +136,14 @@ export const LandingPage: React.FC = () => {
         isOpen={legalModalOpen}
         initialTab={activeLegalTab}
         onClose={() => setLegalModalOpen(false)}
+      />
+
+      {/* Interactive MahaPoshan Help & Issue Solver Chatbot (Offline & Free) */}
+      <HelpBotModal
+        language="mr"
+        onNavigateTab={(tab) => {
+          window.location.hash = `#${tab}`;
+        }}
       />
     </div>
   );

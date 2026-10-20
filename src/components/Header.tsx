@@ -105,8 +105,12 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-3">
           {/* School Name & Info */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 flex items-center justify-center font-bold shrink-0 shadow-xs">
-              <Utensils className="w-4 h-4 sm:w-5 sm:h-5 text-amber-700" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-amber-200/80 flex items-center justify-center shrink-0 shadow-xs bg-amber-50">
+              <img
+                src="/icon-192.png"
+                alt="MahaPoshan App Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div className="min-w-0">
               <h1 className="font-bold text-slate-900 text-xs sm:text-base leading-tight truncate">
@@ -345,8 +349,12 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Drawer Header */}
             <div className="bg-amber-800 text-white p-4 flex items-center justify-between">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-amber-700/80 flex items-center justify-center shrink-0">
-                  <Utensils className="w-4 h-4 text-amber-200" />
+                <div className="w-8 h-8 rounded-lg overflow-hidden border border-amber-500/40 flex items-center justify-center shrink-0 bg-white">
+                  <img
+                    src="/icon-192.png"
+                    alt="MahaPoshan App Logo"
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-sm leading-tight truncate">

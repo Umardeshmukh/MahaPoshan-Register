@@ -39,6 +39,7 @@ import {
 } from './lib/cloud-sync';
 import { LegalModal } from './components/LegalModal';
 import { ReferralCard } from './components/ReferralCard';
+import { HelpBotModal } from './components/HelpBotModal';
 import { LegalDocType } from './types';
 import { Mail } from 'lucide-react';
 
@@ -722,6 +723,24 @@ export default function App() {
           schoolName={appData.profile.schoolName}
           udiseNumber={appData.profile.udiseNumber}
           onClose={() => setReferralModalOpen(false)}
+        />
+      )}
+
+      {/* MahaPoshan Help & Issue-Solving Chatbot (100% Free & Offline-Ready) */}
+      {activeTab !== 'print' && (
+        <HelpBotModal
+          language={appData.language}
+          onNavigateTab={handleNavigateTab}
+          onTriggerSync={() => {
+            if (user?.id) {
+              syncFullAppDataToCloud(
+                appData,
+                user.id,
+                user.primaryEmailAddress?.emailAddress,
+                user.fullName || undefined
+              );
+            }
+          }}
         />
       )}
     </div>

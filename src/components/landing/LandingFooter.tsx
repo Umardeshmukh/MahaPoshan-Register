@@ -16,8 +16,12 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenLegal }) => 
           {/* Col 1: Brand & Description */}
           <div className="md:col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold">
-                <Sparkles className="w-4 h-4 text-amber-300" />
+              <div className="w-8 h-8 rounded-lg overflow-hidden border border-amber-400/40 shrink-0 bg-white shadow-xs">
+                <img
+                  src="/icon-192.png"
+                  alt="MahaPoshan Register Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <span className="font-extrabold text-base text-white tracking-tight">
                 MahaPoshan Register

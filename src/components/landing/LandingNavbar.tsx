@@ -49,8 +49,12 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onOpenLegal }) => 
         <div className="flex items-center justify-between">
           {/* Logo & Brand */}
           <a href="#" className="flex items-center gap-2.5 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-md shadow-emerald-700/20 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-5 h-5 text-amber-300" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-300/60 shadow-md shadow-amber-900/10 group-hover:scale-105 transition-transform bg-white shrink-0">
+              <img
+                src="/icon-192.png"
+                alt="MahaPoshan Register Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div className="flex flex-col">
               <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 leading-none">
