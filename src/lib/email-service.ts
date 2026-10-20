@@ -685,3 +685,139 @@ export async function sendReferralEligibilityEmail(params: {
   });
 }
 
+/**
+ * Sends end-of-month personalized notification reminding schools to export PDF/Excel
+ * and alerting them about the 12-month data retention policy.
+ */
+export async function sendMonthlyBackupReminderEmail(params: {
+  userEmail: string;
+  userName?: string;
+  schoolName: string;
+  udiseNumber: string;
+  monthName?: string;
+  yearMonth?: string;
+}): Promise<SendEmailResponse> {
+  const currentMonth = params.monthName || new Date().toLocaleString('mr-IN', { month: 'long', year: 'numeric' });
+  const appUrl = typeof window !== 'undefined' ? `${window.location.origin}/#report` : 'https://mahaposhan.in/#report';
+  const ymKey = params.yearMonth || new Date().toISOString().slice(0, 7);
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="mr">
+    <head>
+      <meta charset="utf-8">
+      <title>शालेय पोषण आहार मासिक अहवाल व बॅकअप स्मरणपत्र</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .header { background: linear-gradient(135deg, #92400e 0%, #b45309 100%); color: #ffffff; padding: 24px; text-align: center; }
+        .logo-title { font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
+        .subtitle { font-size: 13px; color: #fef3c7; margin-top: 4px; }
+        .content { padding: 28px 24px; }
+        .badge { display: inline-block; background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; margin-bottom: 12px; }
+        .greeting { font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 14px; }
+        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 16px 0; }
+        .card-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
+        .card-row:last-child { border-bottom: none; }
+        .label { color: #64748b; font-weight: 500; }
+        .value { color: #0f172a; font-weight: 700; }
+        .alert-box { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin: 20px 0; }
+        .alert-title { font-size: 13px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+        .alert-text { font-size: 12px; color: #78350f; margin: 0; line-height: 1.5; }
+        .steps { background: #f1f5f9; padding: 16px; border-radius: 10px; margin: 16px 0; font-size: 13px; color: #334155; }
+        .steps ol { margin: 0; padding-left: 20px; }
+        .steps li { margin-bottom: 6px; }
+        .btn-container { text-align: center; margin: 24px 0 16px; }
+        .btn { display: inline-block; background: #92400e; color: #ffffff !important; text-decoration: none; padding: 12px 28px; font-size: 14px; font-weight: bold; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .footer { background: #f8fafc; border-top: 1px solid #f1f5f9; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <!-- Header -->
+        <div class="header">
+          <div class="badge">मासिक अहवाल व बॅकअप स्मरणपत्र</div>
+          <h1 class="logo-title">MahaPoshan Register</h1>
+          <p class="subtitle">शालेय पोषण आहार योजना (PM POSHAN) • महाराष्ट्र शासन</p>
+        </div>
+
+        <!-- Body Content -->
+        <div class="content">
+          <p class="greeting">
+            सस्नेह नमस्कार, ${params.userName ? `<strong>${params.userName}</strong> (मुख्याध्यापक / पोषण आहार प्रभारी)` : 'मुख्याध्यापक / शिक्षक बंधू-भगिनींनो'},
+          </p>
+
+          <p style="font-size: 13px; color: #334155;">
+            आपल्या शाळेचा <strong>${currentMonth}</strong> या महिन्याचा शालेय पोषण आहार (PM-POSHAN) दैनिक खर्च व साठा हिशोब पूर्ण झाला असेल. कृपया महिना अखेरीस खालील अधिकृत शासकीय अहवाल त्वरित डाउनलोड करून जतन करून घ्या:
+          </p>
+
+          <!-- School Meta Card -->
+          <div class="card">
+            <div class="card-row">
+              <span class="label">शाळेचे नाव:</span>
+              <span class="value">${params.schoolName}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">UDISE क्रमांक:</span>
+              <span class="value">${params.udiseNumber}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">कालावधी:</span>
+              <span class="value">${currentMonth}</span>
+            </div>
+          </div>
+
+          <!-- 12-Month Data Retention Policy Alert -->
+          <div class="alert-box">
+            <div class="alert-title">
+              ⚠️ महत्त्वाची सूचना: १२ महिन्यांचे डेटा सुरक्षितता धोरण (Data Retention Policy)
+            </div>
+            <p class="alert-text">
+              महापोषण नोंदवही प्रणालीच्या नियमांनुसार आपल्या शाळेचा दैनिक व साठा डेटा क्लाउडवर <strong>१२ महिने (१ वर्ष)</strong> पर्यंत सुरक्षित ठेवला जातो. <strong>१२ महिन्यांनंतर जुना डेटा स्वयंचलितपणे हटवला (Auto-purged) जातो.</strong>
+              <br><br>
+              शासकीय लेखापरीक्षण (Audit), केंद्रप्रमुख व शिक्षण विस्तार अधिकारी तपासणीसाठी शाळेच्या प्रत्यक्ष दप्तरी अहवाल असणे अनिवार्य असल्याने <strong>कृपया दर महिन्याचा अहवाल (PDF व Excel) डाऊनलोड करून शाळेच्या कॉम्प्युटर किंवा गुगल ड्राइव्हवर सुरक्षित ठेवा.</strong>
+            </p>
+          </div>
+
+          <!-- Simple 3-step action guide -->
+          <div class="steps">
+            <strong>अहवाल डाउनलोड करण्याच्या सोप्या पायऱ्या:</strong>
+            <ol>
+              <li>खालील बटनावर क्लिक करून <strong>शासकीय अहवाल</strong> विभागात जा.</li>
+              <li><strong>${currentMonth}</strong> निवडा आणि <strong>"Excel डाउनलोड"</strong> व <strong>"प्रिंट / PDF सेव्ह करा"</strong> वर क्लिक करा.</li>
+              <li>सेटिंग्जमधून <strong>"डेटा बॅकअप फाईल (.json)"</strong> सुद्धा डाउनलोड करून ठेवा.</li>
+            </ol>
+          </div>
+
+          <!-- Direct CTA Button -->
+          <div class="btn-container">
+            <a href="${appUrl}" class="btn" target="_blank">
+              मासिक अहवाल व बॅकअप डाउनलोड करा &rarr;
+            </a>
+          </div>
+
+          <p style="font-size: 12px; color: #64748b; text-align: center; margin-top: 16px;">
+            काही अडचण आल्यास आपण आम्हाला <a href="mailto:poshanregister@gmail.com" style="color: #92400e; font-weight: bold;">poshanregister@gmail.com</a> वर संपर्क साधू शकता.
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+          <p style="margin: 0;">MahaPoshan Register • स्वतंत्र शालेय साहाय्यक प्रणाली • महाराष्ट्र शासन</p>
+          <p style="margin: 4px 0 0;">हे स्वयंचलित महिनाअखेर डेटा सुरक्षा स्मरणपत्र आहे. सुरक्षिततेसाठी आपले अहवाल नियमित डाऊनलोड करा.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: params.userEmail,
+    subject: `[महत्त्वाचे] मासिक पोषण आहार अहवाल डाऊनलोड करा (${currentMonth}) - ${params.schoolName}`,
+    html,
+    dedupKey: `monthly_backup_reminder_${params.userEmail}_${ymKey}`,
+    dedupTtlHours: 360, // Only 1 reminder per month (15 days TTL window)
+  });
+}
+
+

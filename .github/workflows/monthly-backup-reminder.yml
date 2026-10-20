@@ -1,0 +1,32 @@
+name: Monthly Backup & 12-Month Data Retention Reminder
+
+on:
+  # Runs at 09:00 AM IST (03:30 AM UTC) on the 28th day of every month
+  schedule:
+    - cron: '30 3 28 * *'
+  # Allows manual triggering from GitHub Actions tab at any time
+  workflow_dispatch:
+
+jobs:
+  send-monthly-reminders:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Monthly Reminder Broadcast
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || 're_TxV9nR8Q_GYfaRUa6a4SPWjFo8B9Y44gC' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://oagkvgocsqjpxrhmbvtl.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npx tsx scripts/send-monthly-backup-reminders.ts

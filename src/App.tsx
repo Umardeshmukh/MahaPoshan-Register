@@ -40,6 +40,7 @@ import {
 import { LegalModal } from './components/LegalModal';
 import { ReferralCard } from './components/ReferralCard';
 import { HelpBotModal } from './components/HelpBotModal';
+import { MonthlyBackupReminderModal } from './components/MonthlyBackupReminderModal';
 import { LegalDocType } from './types';
 import { Mail } from 'lucide-react';
 
@@ -741,6 +742,15 @@ export default function App() {
               );
             }
           }}
+        />
+      )}
+
+      {/* End-of-Month Data Protection & 12-Month Retention Reminder Modal */}
+      {activeTab !== 'print' && (
+        <MonthlyBackupReminderModal
+          appData={appData}
+          language={appData.language}
+          onNavigateTab={handleNavigateTab}
         />
       )}
     </div>
