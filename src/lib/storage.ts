@@ -261,9 +261,10 @@ export function getInitialData(): AppData {
         }
 
         // Merge and update ingredients to conform to official matrix norms
-        if (parsed.ingredients) {
+        const sourceIngredients = parsed.config?.rates?.ingredients || parsed.ingredients;
+        if (sourceIngredients) {
           parsed.ingredients = DEFAULT_INGREDIENTS.map((def) => {
-            const existing = parsed.ingredients?.find((i: Ingredient) => i.id === def.id);
+            const existing = sourceIngredients.find((i: Ingredient) => i.id === def.id);
             return {
               ...def,
               defaultGrams: def.defaultGrams,
@@ -275,20 +276,25 @@ export function getInitialData(): AppData {
         } else {
           parsed.ingredients = DEFAULT_INGREDIENTS;
         }
+        if (parsed.config?.rates) {
+          parsed.config.rates.ingredients = parsed.ingredients;
+        }
 
-        // Automatically migrate to the official 11 dishes if using legacy 6-recipe format
+        // Automatically migrate to the official recipes if using legacy 6-recipe format,
+        // and append any newly added default dishes (e.g. moong_khichdi) while preserving custom ones.
+        const sourceRecipes = parsed.config?.menu?.weeklyRecipes || parsed.recipes;
         const hasLegacyRecipes =
-          !parsed.recipes ||
-          parsed.recipes.length < 11 ||
-          parsed.recipes.some((r: DishRecipe) =>
+          !sourceRecipes ||
+          sourceRecipes.length < 11 ||
+          sourceRecipes.some((r: DishRecipe) =>
             ['mon_masoor', 'tue_moong', 'wed_tur', 'thu_matki', 'fri_chavli', 'sat_soya'].includes(r.id)
           ) ||
-          !parsed.recipes.some((r: DishRecipe) => r.id === 'veg_pulao');
+          !sourceRecipes.some((r: DishRecipe) => r.id === 'veg_pulao');
 
         if (hasLegacyRecipes) {
           parsed.recipes = DEFAULT_RECIPES;
         } else {
-          parsed.recipes = parsed.recipes.map((r: DishRecipe) => {
+          const updatedRecipes = sourceRecipes.map((r: DishRecipe) => {
             const defRecipe = DEFAULT_RECIPES.find((d) => d.id === r.id);
             if (defRecipe) {
               return {
@@ -303,6 +309,16 @@ export function getInitialData(): AppData {
             }
             return r;
           });
+          const existingIds = new Set(updatedRecipes.map((r: DishRecipe) => r.id));
+          for (const defRecipe of DEFAULT_RECIPES) {
+            if (!existingIds.has(defRecipe.id)) {
+              updatedRecipes.push(defRecipe);
+            }
+          }
+          parsed.recipes = updatedRecipes;
+        }
+        if (parsed.config?.menu) {
+          parsed.config.menu.weeklyRecipes = parsed.recipes;
         }
         return syncAppDataConfig(parsed);
       }

@@ -462,6 +462,21 @@ export const DEFAULT_RECIPES: DishRecipe[] = [
       vegetables: 50,
     },
   },
+  {
+    id: 'moong_khichdi',
+    dayOfWeek: 6,
+    dayNameMr: 'अख्खा मूग खिचडी',
+    dayNameEn: 'Whole Moong Khichdi',
+    nameMr: 'अख्खा मूग खिचडी (मूग)',
+    nameEn: 'Whole Moong Khichdi (Mung)',
+    pulseIngredientId: 'moong',
+    pulseGrams: 20,
+    includesRice: true,
+    riceGrams: 100,
+    customCondiments: {
+      vegetables: 50,
+    },
+  },
 ];
 
 export const MARATHI_DAYS = [
@@ -552,9 +567,9 @@ export const MENU_PRESETS: {
 }[] = [
   {
     id: 'mh_standard',
-    nameMr: 'महाराष्ट्र शासन अधिकृत ११ पाककृती मेन्यू (PM-POSHAN)',
-    nameEn: 'Maharashtra Govt Official 11 Recipes Menu',
-    descriptionMr: 'व्हेजिटेबल पुलाव, मसाले भात, मटार पुलाव, मुगडाळ खिचडी, चवळी खिचडी, चना पुलाव, सोयाबीन पुलाव, मसुरी पुलाव, मुग शेवगा वरण भात, मोड आलेले कडधान्य, अंडा पुलाव',
+    nameMr: 'महाराष्ट्र शासन अधिकृत १२ पाककृती मेन्यू (PM-POSHAN)',
+    nameEn: 'Maharashtra Govt Official 12 Recipes Menu',
+    descriptionMr: 'व्हेजिटेबल पुलाव, मसाले भात, मटार पुलाव, मुगडाळ खिचडी, चवळी खिचडी, चना पुलाव, सोयाबीन पुलाव, मसुरी पुलाव, मुग शेवगा वरण भात, मोड आलेले कडधान्य, अंडा पुलाव, अख्खा मूग खिचडी',
     recipes: DEFAULT_RECIPES,
   },
   {
